@@ -2,37 +2,38 @@
 app/models/tracker.py
 
 Application, Interview, Reminder, Note, TimelineEvent ORM models.
-Complete job tracking pipeline with automatic timeline audit trail.
+Matches spec: all child entities include user_id for user-scoped queries.
 """
 import enum
 import uuid
-from datetime import date
-from typing import TYPE_CHECKING, List, Optional
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import JSON, Boolean, Date, Enum as SAEnum, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models import TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.generation import CoverLetter
     from app.models.resume import ResumeVersion
     from app.models.user import User
 
 
-# ── Enums ─────────────────────────────────────────────────────────────────────
-
+# ── Enums ────────────────────────────────────────────────────────────────────────
 
 class ApplicationStatus(str, enum.Enum):
     SAVED = "saved"
     APPLIED = "applied"
     ASSESSMENT = "assessment"
-    HR = "hr"
+    HR_SCREEN = "hr_screen"
     TECHNICAL = "technical"
-    FINAL = "final"
+    FINAL_ROUND = "final_round"
     OFFER = "offer"
     REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"
 
 
 class InterviewType(str, enum.Enum):
@@ -41,15 +42,7 @@ class InterviewType(str, enum.Enum):
     ONSITE = "onsite"
 
 
-class InterviewStatus(str, enum.Enum):
-    SCHEDULED = "scheduled"
-    COMPLETED = "completed"
-    RESCHEDULED = "rescheduled"
-    CANCELLED = "cancelled"
-
-
-# ── Models ────────────────────────────────────────────────────────────────────
-
+# ── Models ───────────────────────────────────────────────────────────────────────
 
 class Application(Base, TimestampMixin):
     __tablename__ = "applications"
@@ -68,39 +61,51 @@ class Application(Base, TimestampMixin):
         ForeignKey("resume_versions.id", ondelete="SET NULL"),
         nullable=True,
     )
+    cover_letter_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cover_letters.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    cover_letter_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cover_letters.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
-    # ── Core fields ───────────────────────────────────────────────────────────
+    # ── Core ─────────────────────────────────────────────────────────────────────
     company_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[ApplicationStatus] = mapped_column(
-        SAEnum(ApplicationStatus), default=ApplicationStatus.SAVED, nullable=False
+        SAEnum(ApplicationStatus),
+        default=ApplicationStatus.SAVED,
+        nullable=False,
     )
-    application_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-
-    # ── Details ───────────────────────────────────────────────────────────────
-    source: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    job_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
-    salary_range: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     recruiter_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    recruiter_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    notes_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    applied_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    notes_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # ── Relationships ─────────────────────────────────────────────────────────
+    # ── Relationships ─────────────────────────────────────────────────────────────
     user: Mapped["User"] = relationship("User", back_populates="applications")
     resume_version: Mapped[Optional["ResumeVersion"]] = relationship(
         "ResumeVersion", back_populates="applications"
     )
-    interviews: Mapped[List["Interview"]] = relationship(
+    cover_letter: Mapped[Optional["CoverLetter"]] = relationship(
+        "CoverLetter"
+    )
+    interviews: Mapped[list["Interview"]] = relationship(
         "Interview", back_populates="application", cascade="all, delete-orphan"
     )
-    reminders: Mapped[List["Reminder"]] = relationship(
+    reminders: Mapped[list["Reminder"]] = relationship(
         "Reminder", back_populates="application", cascade="all, delete-orphan"
     )
-    notes: Mapped[List["Note"]] = relationship(
+    notes: Mapped[list["Note"]] = relationship(
         "Note", back_populates="application", cascade="all, delete-orphan"
     )
-    timeline_events: Mapped[List["TimelineEvent"]] = relationship(
+    timeline_events: Mapped[list["TimelineEvent"]] = relationship(
         "TimelineEvent",
         back_populates="application",
         cascade="all, delete-orphan",
@@ -120,24 +125,22 @@ class Interview(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    round_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
     interview_type: Mapped[InterviewType] = mapped_column(
         SAEnum(InterviewType), default=InterviewType.VIDEO, nullable=False
     )
-    status: Mapped[InterviewStatus] = mapped_column(
-        SAEnum(InterviewStatus), default=InterviewStatus.SCHEDULED, nullable=False
+    scheduled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )
-    interview_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    interview_time: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    timezone: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True, default="UTC"
-    )
-    interviewer_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    meeting_link: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    duration_minutes: Mapped[Optional[int]] = mapped_column(nullable=True)
+    location_or_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    reminder_enabled: Mapped[bool] = mapped_column(
-        Boolean, default=True, nullable=False
-    )
 
     application: Mapped["Application"] = relationship(
         "Application", back_populates="interviews"
@@ -156,12 +159,17 @@ class Reminder(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    remind_at: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True
-    )  # ISO 8601 datetime string
-    is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    remind_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_sent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     application: Mapped["Application"] = relationship(
         "Application", back_populates="reminders"
@@ -177,6 +185,12 @@ class Note(Base, TimestampMixin):
     application_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("applications.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -199,11 +213,16 @@ class TimelineEvent(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    # e.g. "application_created" | "status_changed" | "interview_scheduled" | "reminder_completed"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    metadata_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     application: Mapped["Application"] = relationship(
         "Application", back_populates="timeline_events"
