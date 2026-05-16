@@ -4,12 +4,16 @@ app/schemas/user.py
 Profile and settings schemas.
 """
 import uuid
+from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.auth import SubscriptionStatus
+
 
 class UserSettingsOut(BaseModel):
+    """User settings read model."""
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -20,11 +24,25 @@ class UserSettingsOut(BaseModel):
     target_roles: Optional[List[str]] = None
 
 
-class UpdateProfileRequest(BaseModel):
+class UserProfileOut(BaseModel):
+    """Full user profile with nested settings."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: str
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
     initials: Optional[str] = None
-    onboarding_completed: Optional[bool] = None
+    email_verified: bool
+    subscription_tier: str          # "free" | "pro" | "premium"
+    onboarding_completed: bool
+    settings: Optional[UserSettingsOut] = None
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    # initials auto-generated; no direct update
 
 
 class UpdateSettingsRequest(BaseModel):
@@ -35,15 +53,11 @@ class UpdateSettingsRequest(BaseModel):
     target_roles: Optional[List[str]] = None
 
 
-class UserProfileOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class MeResponse(BaseModel):
+    """Response for GET /me."""
+    user: UserProfileOut
 
-    id: uuid.UUID
-    email: str
-    full_name: Optional[str] = None
-    avatar_url: Optional[str] = None
-    initials: Optional[str] = None
-    email_verified: bool
-    plan: str
-    onboarding_completed: bool
-    settings: Optional[UserSettingsOut] = None
+
+class CompleteOnboardingRequest(BaseModel):
+    full_name: str
+    target_roles: Optional[List[str]] = None

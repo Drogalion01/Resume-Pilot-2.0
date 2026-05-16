@@ -1,32 +1,41 @@
 // lib/core/auth/auth_notifier.dart
 //
-// Riverpod notifier managing the full authentication lifecycle.
-// Persists token in flutter_secure_storage, auto-restores on cold start.
+// Riverpod notifier managing the full passwordless authentication lifecycle.
+//
+//  Flows supported:
+//   • Magic Link  — sendMagicLink() → verifyMagicLink(token)
+//   • OAuth PKCE  — oauthAuthorize(provider) → oauthCallback(provider,code,state)
+//   • TOTP        — verifyTotp(mfaToken, code)   [optional 2FA]
+//   • Session     — restores on cold start, silent refresh via Dio interceptor
+//   • Logout      — revokes refresh token + clears secure storage
 
 import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
 import '../constants/app_constants.dart';
 import '../models/user_model.dart';
 import '../network/api_client.dart';
 import 'auth_state.dart';
 
-// ── Provider ──────────────────────────────────────────────────────────────────
+// ── Provider ───────────────────────────────────────────────────────────────────
 
-final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+final authNotifierProvider =
+    StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final client = ref.watch(apiClientProvider);
   return AuthNotifier(client: client);
 });
 
-// ── Notifier ──────────────────────────────────────────────────────────────────
+// ── Notifier ───────────────────────────────────────────────────────────────────
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final ApiClient _client;
-  final _storage = const FlutterSecureStorage();
-  final _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+  final _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   AuthNotifier({required ApiClient client})
       : _client = client,
@@ -34,18 +43,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _restoreSession();
   }
 
-  // ── Session restoration ────────────────────────────────────────────────────
+  // ── Session restoration ──────────────────────────────────────────────────────
 
   Future<void> _restoreSession() async {
     state = const AuthStateLoading();
     try {
-      final token = await _storage.read(key: AppConstants.tokenKey);
+      final token = await _storage.read(key: AppConstants.accessTokenKey);
       final userJson = await _storage.read(key: AppConstants.userKey);
 
       if (token != null && userJson != null) {
         final user = UserModel.fromJson(
-          Map<String, dynamic>.from(const jsonDecoder.convert(userJson) as Map),
+          Map<String, dynamic>.from(
+              const JsonDecoder().convert(userJson) as Map),
         );
+        _client.setToken(token);
         state = AuthStateAuthenticated(token: token, user: user);
       } else {
         state = const AuthStateUnauthenticated();
@@ -55,129 +66,168 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  // ── Register ──────────────────────────────────────────────────────────────
+  // ── Magic Link ───────────────────────────────────────────────────────────────
 
-  Future<void> register({
-    required String email,
-    required String password,
-    String? fullName,
-  }) async {
+  /// Step 1: Send magic link email.
+  Future<void> sendMagicLink(String email) async {
     state = const AuthStateLoading();
     try {
-      final response = await _client.post('/auth/register', data: {
-        'email': email,
-        'password': password,
-        if (fullName != null && fullName.isNotEmpty) 'full_name': fullName,
-      });
-      await _persistSession(response.data as Map<String, dynamic>);
+      await _client.dio.post(
+        '/auth/magic-link/send',
+        queryParameters: {'email': email},
+      );
+      state = AuthStateMagicLinkSent(email: email);
     } on DioException catch (e) {
-      final err = e.error;
-      if (err is ApiException) {
-        state = AuthStateError(message: err.message, code: err.code);
-      } else {
-        state = const AuthStateError(message: 'Registration failed. Please try again.');
-      }
+      state = AuthStateError(message: _extractError(e, 'Failed to send magic link'));
     }
   }
 
-  // ── Login ─────────────────────────────────────────────────────────────────
-
-  Future<void> login({required String email, required String password}) async {
+  /// Step 2: Called from deep link — verifies token with backend.
+  Future<void> verifyMagicLink(String token) async {
     state = const AuthStateLoading();
     try {
-      final response = await _client.post('/auth/login', data: {
-        'email': email,
-        'password': password,
-      });
-      await _persistSession(response.data as Map<String, dynamic>);
+      final res = await _client.dio.post(
+        '/auth/magic-link/verify',
+        queryParameters: {'token': token},
+      );
+      _handleAuthResponse(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      final err = e.error;
-      if (err is ApiException) {
-        state = AuthStateError(message: err.message, code: err.code);
-      } else {
-        state = const AuthStateError(message: 'Login failed. Please try again.');
-      }
+      state = AuthStateError(message: _extractError(e, 'Invalid or expired magic link'));
     }
   }
 
-  // ── Google Sign-In ─────────────────────────────────────────────────────────
+  // ── OAuth PKCE ───────────────────────────────────────────────────────────────
 
-  Future<void> loginWithGoogle() async {
+  /// Opens the provider OAuth page in a secure in-app browser,
+  /// then posts the code + state to backend.
+  Future<void> oauthAuthorize(String provider) async {
     state = const AuthStateLoading();
     try {
-      final googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        state = const AuthStateUnauthenticated();
+      // 1. Get the authorization URL from backend
+      final res = await _client.dio.get(
+        '/auth/oauth/$provider/authorize',
+        queryParameters: {
+          'redirect_uri': '${AppConstants.deepLinkBase}/auth/callback/$provider',
+        },
+      );
+      final data = res.data as Map<String, dynamic>;
+      final authUrl = data['authorization_url'] as String;
+      final expectedState = data['state'] as String;
+
+      // 2. Open in-app browser (flutter_web_auth_2 — PKCE safe)
+      final result = await FlutterWebAuth2.authenticate(
+        url: authUrl,
+        callbackUrlScheme: 'resumepilot',
+      );
+
+      // 3. Parse callback URL
+      final uri = Uri.parse(result);
+      final code = uri.queryParameters['code'];
+      final returnedState = uri.queryParameters['state'];
+
+      if (code == null) {
+        state = const AuthStateError(message: 'OAuth cancelled or failed');
+        return;
+      }
+      if (returnedState != expectedState) {
+        state = const AuthStateError(message: 'OAuth state mismatch — possible CSRF');
         return;
       }
 
-      final auth = await googleUser.authentication;
-      final idToken = auth.idToken;
-      if (idToken == null) {
-        state = const AuthStateError(message: 'Google sign-in failed. No token received.');
-        return;
-      }
-
-      final response = await _client.post('/auth/google', data: {'id_token': idToken});
-      await _persistSession(response.data as Map<String, dynamic>);
+      // 4. Exchange code with backend
+      final callbackRes = await _client.dio.post(
+        '/auth/oauth/$provider/callback',
+        data: {
+          'code': code,
+          'state': returnedState,
+          'redirect_uri': '${AppConstants.deepLinkBase}/auth/callback/$provider',
+        },
+      );
+      _handleAuthResponse(callbackRes.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      final err = e.error;
-      if (err is ApiException) {
-        state = AuthStateError(message: err.message, code: err.code);
-      } else {
-        state = const AuthStateError(message: 'Google sign-in failed. Please try again.');
-      }
-    } catch (_) {
-      state = const AuthStateError(message: 'Google sign-in was cancelled.');
+      state = AuthStateError(message: _extractError(e, 'OAuth sign-in failed'));
+    } catch (e) {
+      state = AuthStateError(message: 'OAuth was cancelled');
     }
   }
 
-  // ── Logout ────────────────────────────────────────────────────────────────
+  // ── TOTP ─────────────────────────────────────────────────────────────────────
+
+  Future<void> verifyTotp(String mfaToken, String code) async {
+    state = const AuthStateLoading();
+    try {
+      final res = await _client.dio.post(
+        '/auth/totp/verify',
+        queryParameters: {'mfa_token': mfaToken, 'code': code},
+      );
+      _handleAuthResponse(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      state = AuthStateMFAPending(mfaToken: mfaToken); // keep on screen with error
+      // surface error via a separate mechanism — keep MFAPending so screen stays
+    }
+  }
+
+  // ── Logout ───────────────────────────────────────────────────────────────────
 
   Future<void> logout() async {
     try {
-      await _client.post('/auth/logout');
+      final refreshToken = await _storage.read(key: AppConstants.refreshTokenKey);
+      if (refreshToken != null) {
+        await _client.dio.post(
+          '/auth/token/revoke',
+          data: {'refresh_token': refreshToken},
+        );
+      }
     } catch (_) {
-      // Logout is best-effort
+      // logout is best-effort
     }
-    await _storage.delete(key: AppConstants.tokenKey);
-    await _storage.delete(key: AppConstants.userKey);
-    await _googleSignIn.signOut();
-    await _client.clearToken();
+    await _clearSession();
+  }
+
+  Future<void> logoutAllDevices() async {
+    try {
+      await _client.dio.post('/auth/token/revoke-all');
+    } catch (_) {}
+    await _clearSession();
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+
+  /// Handles both AuthResponse {access_token, refresh_token, user}
+  /// and MFARequiredResponse {mfa_token, mfa_required: true}.
+  void _handleAuthResponse(Map<String, dynamic> data) {
+    if (data['mfa_required'] == true) {
+      state = AuthStateMFAPending(mfaToken: data['mfa_token'] as String);
+      return;
+    }
+    _persistSession(data);
+  }
+
+  Future<void> _persistSession(Map<String, dynamic> data) async {
+    final accessToken = data['access_token'] as String;
+    final refreshToken = data['refresh_token'] as String?;
+    final user = UserModel.fromJson(data['user'] as Map<String, dynamic>);
+
+    _client.setToken(accessToken);
+    await _storage.write(key: AppConstants.accessTokenKey, value: accessToken);
+    if (refreshToken != null) {
+      await _storage.write(key: AppConstants.refreshTokenKey, value: refreshToken);
+    }
+    await _storage.write(key: AppConstants.userKey, value: jsonEncode(user.toJson()));
+    state = AuthStateAuthenticated(token: accessToken, user: user);
+  }
+
+  Future<void> _clearSession() async {
+    _client.clearToken();
+    await _storage.deleteAll();
     state = const AuthStateUnauthenticated();
   }
 
-  // ── Complete onboarding ────────────────────────────────────────────────────
-
-  Future<void> completeOnboarding({
-    required String fullName,
-    List<String>? targetRoles,
-  }) async {
+  String _extractError(DioException e, String fallback) {
     try {
-      final response = await _client.post('/auth/onboarding', data: {
-        'full_name': fullName,
-        if (targetRoles != null) 'target_roles': targetRoles,
-      });
-      await _persistSession(response.data as Map<String, dynamic>);
-    } catch (_) {
-      // fail silently — user can update profile later
-    }
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  Future<void> _persistSession(Map<String, dynamic> data) async {
-    final token = data['access_token'] as String;
-    final user = UserModel.fromJson(data['user'] as Map<String, dynamic>);
-
-    await _client.setToken(token);
-    await _storage.write(key: AppConstants.tokenKey, value: token);
-    await _storage.write(
-      key: AppConstants.userKey,
-      value: jsonEncode(user.toJson()),
-    );
-    state = AuthStateAuthenticated(token: token, user: user);
+      final body = e.response?.data;
+      if (body is Map) return body['detail'] as String? ?? fallback;
+    } catch (_) {}
+    return fallback;
   }
 }
-
-const jsonDecoder = JsonDecoder();

@@ -1,70 +1,56 @@
 """
 app/schemas/auth.py
 
-Request and response schemas for the /auth endpoints.
+Request and response schemas for passwordless authentication endpoints.
 """
 import uuid
+from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
-# ── Requests ──────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────────
+# Requests
+# ────────────────────────────────────────────────────────────────────────────────
 
-
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str
-    full_name: Optional[str] = None
-
-    @field_validator("password")
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long.")
-        return v
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class GoogleAuthRequest(BaseModel):
-    """Google Sign-In: client passes the idToken from google_sign_in package."""
-    id_token: str
-
-
-class VerifyEmailRequest(BaseModel):
-    token: str
-
-
-class ForgotPasswordRequest(BaseModel):
+class MagicLinkSendRequest(BaseModel):
     email: EmailStr
 
 
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
-
-    @field_validator("new_password")
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long.")
-        return v
+class MagicLinkVerifyRequest(BaseModel):
+    token: str = Field(..., min_length=1, description="The raw magic link token from email")
 
 
-class CompleteOnboardingRequest(BaseModel):
-    full_name: str
-    target_roles: Optional[list[str]] = None
+class OAuthAuthorizeRequest(BaseModel):
+    provider: str = Field(..., pattern="^(google|github|linkedin)$")
+    redirect_uri: str = Field(..., description="App deep link URI, e.g. resumepilot://app/auth/callback/google")
 
 
-# ── Responses ─────────────────────────────────────────────────────────────────
+class OAuthCallbackRequest(BaseModel):
+    code: str
+    state: str
+    redirect_uri: str
 
+
+class TOTPVerifyRequest(BaseModel):
+    code: str = Field(..., min_length=6, max_length=8, description="6-digit TOTP or 8-char backup code")
+
+
+class TOTPConfirmRequest(BaseModel):
+    code: str = Field(..., min_length=6, max_length=6, description="6-digit TOTP to confirm setup")
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=1)
+
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Responses
+# ────────────────────────────────────────────────────────────────────────────────
 
 class UserOut(BaseModel):
-    """Public user representation — never exposes password_hash, tokens."""
+    """Public user representation — minimal, safe fields only."""
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -73,18 +59,45 @@ class UserOut(BaseModel):
     avatar_url: Optional[str] = None
     initials: Optional[str] = None
     email_verified: bool
-    plan: str          # "free" | "pro"
-    is_active: bool
+    subscription_tier: str = Field(..., alias="tier")  # "free" | "pro" | "premium"
     onboarding_completed: bool
 
 
-class TokenResponse(BaseModel):
-    """JWT token + embedded user object."""
+class AuthResponse(BaseModel):
+    """Successful authentication response."""
     access_token: str
     token_type: str = "bearer"
+    refresh_token: str
     user: UserOut
 
 
-class MeResponse(BaseModel):
-    """Response for GET /auth/me — just the user, no new token."""
-    user: UserOut
+class MFARequiredResponse(BaseModel):
+    """Returned when MFA is required to complete login."""
+    mfa_token: str
+    mfa_required: bool = True
+
+
+class TOTPSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+    backup_codes: list[str]
+
+
+class SubscriptionStatus(BaseModel):
+    tier: str
+    generation_used: int
+    generation_limit: int
+    resets_at: Optional[datetime] = None
+
+
+class SessionInfo(BaseModel):
+    """Refresh token family / device session info."""
+    id: uuid.UUID
+    family_id: uuid.UUID
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    created_at: datetime
+    expires_at: datetime
+    is_revoked: bool
+
+    model_config = ConfigDict(from_attributes=True)

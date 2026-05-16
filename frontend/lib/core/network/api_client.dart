@@ -1,12 +1,16 @@
 // lib/core/network/api_client.dart
 //
 // Dio HTTP client with:
-//   - JWT Bearer injection
-//   - Hive-backed offline cache (GET requests)
-//   - 401 auto-logout
-//   - Structured error parsing
+//   1. AuthInterceptor  — injects Bearer token; on 401 silently refreshes ONCE
+//                         and retries the original request; queues concurrent calls
+//   2. ErrorInterceptor — maps HTTP errors to typed ApiException
+//   3. LogInterceptor   — debug mode only
+//
+// Never use SharedPreferences for token storage — only flutter_secure_storage.
 
+import 'dart:async';
 import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'package:dio_cache_interceptor_hive_store/dio_cache_interceptor_hive_store.dart';
@@ -15,7 +19,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../constants/app_constants.dart';
 
-// ── Providers ─────────────────────────────────────────────────────────────────
+// ── Providers ──────────────────────────────────────────────────────────────────
 
 final cacheDirProvider = Provider<String>((ref) {
   throw UnimplementedError('cacheDirProvider must be overridden in main()');
@@ -23,17 +27,22 @@ final cacheDirProvider = Provider<String>((ref) {
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final cacheDir = ref.watch(cacheDirProvider);
-  return ApiClient(cacheDir: cacheDir, ref: ref);
+  return ApiClient(cacheDir: cacheDir);
 });
 
-// ── API Client ────────────────────────────────────────────────────────────────
+// ── API Client ─────────────────────────────────────────────────────────────────
 
 class ApiClient {
   late final Dio _dio;
+  late final Dio _refreshDio; // separate Dio for refresh — avoids interceptor loop
   late final CacheOptions _cacheOptions;
-  final _storage = const FlutterSecureStorage();
+  final _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
-  ApiClient({required String cacheDir, required Ref ref}) {
+  String? _accessToken;
+
+  ApiClient({required String cacheDir}) {
     final store = HiveCacheStore(cacheDir);
 
     _cacheOptions = CacheOptions(
@@ -41,6 +50,13 @@ class ApiClient {
       maxStale: AppConstants.cacheMaxAge,
       hitCacheOnErrorExcept: [401, 403],
     );
+
+    _refreshDio = Dio(BaseOptions(
+      baseUrl: AppConstants.baseUrl,
+      connectTimeout: AppConstants.connectTimeout,
+      receiveTimeout: AppConstants.receiveTimeout,
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+    ));
 
     _dio = Dio(BaseOptions(
       baseUrl: AppConstants.baseUrl,
@@ -51,7 +67,7 @@ class ApiClient {
 
     _dio.interceptors.addAll([
       DioCacheInterceptor(options: _cacheOptions),
-      _AuthInterceptor(_storage),
+      _SilentRefreshInterceptor(_storage, _refreshDio, this),
       _ErrorInterceptor(),
       if (const bool.fromEnvironment('dart.vm.product') == false)
         LogInterceptor(requestBody: false, responseBody: false),
@@ -60,43 +76,89 @@ class ApiClient {
 
   Dio get dio => _dio;
 
-  Future<Response<T>> get<T>(String path, {Map<String, dynamic>? queryParameters, bool cache = false}) =>
-      _dio.get<T>(path,
-          queryParameters: queryParameters,
-          options: cache ? _cacheOptions.toOptions() : null);
+  // ── Token management (in-memory + secure storage) ──────────────────────────
 
-  Future<Response<T>> post<T>(String path, {dynamic data}) => _dio.post<T>(path, data: data);
+  void setToken(String token) {
+    _accessToken = token;
+    _dio.options.headers['Authorization'] = 'Bearer $token';
+  }
 
-  Future<Response<T>> patch<T>(String path, {dynamic data}) => _dio.patch<T>(path, data: data);
+  void clearToken() {
+    _accessToken = null;
+    _dio.options.headers.remove('Authorization');
+  }
 
-  Future<Response<T>> delete<T>(String path) => _dio.delete<T>(path);
-
-  Future<void> setToken(String token) async =>
-      _storage.write(key: AppConstants.tokenKey, value: token);
-
-  Future<void> clearToken() async =>
-      _storage.delete(key: AppConstants.tokenKey);
-
-  Future<String?> getToken() async =>
-      _storage.read(key: AppConstants.tokenKey);
+  String? get currentToken => _accessToken;
 }
 
-// ── Interceptors ─────────────────────────────────────────────────────────────
+// ── Silent Refresh Interceptor ─────────────────────────────────────────────────
+// On 401: refresh ONCE using the stored refresh_token, update storage, retry.
+// Queues concurrent requests so only ONE refresh is in-flight at a time.
 
-class _AuthInterceptor extends Interceptor {
+class _SilentRefreshInterceptor extends QueuedInterceptorsWrapper {
   final FlutterSecureStorage _storage;
+  final Dio _refreshDio;
+  final ApiClient _client;
 
-  const _AuthInterceptor(this._storage);
+  _SilentRefreshInterceptor(this._storage, this._refreshDio, this._client);
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
-    final token = await _storage.read(key: AppConstants.tokenKey);
+    final token = await _storage.read(key: AppConstants.accessTokenKey);
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
     }
     handler.next(options);
   }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (err.response?.statusCode != 401) {
+      handler.next(err);
+      return;
+    }
+
+    // Don't retry the refresh endpoint itself
+    if (err.requestOptions.path.contains('/auth/token/refresh')) {
+      handler.next(err);
+      return;
+    }
+
+    try {
+      final refreshToken = await _storage.read(key: AppConstants.refreshTokenKey);
+      if (refreshToken == null) {
+        handler.next(err);
+        return;
+      }
+
+      // Attempt silent refresh
+      final response = await _refreshDio.post('/auth/token/refresh',
+          data: {'refresh_token': refreshToken});
+
+      final data = response.data as Map<String, dynamic>;
+      final newAccess  = data['access_token'] as String;
+      final newRefresh = data['refresh_token'] as String;
+
+      // Persist rotated tokens
+      await _storage.write(key: AppConstants.accessTokenKey,  value: newAccess);
+      await _storage.write(key: AppConstants.refreshTokenKey, value: newRefresh);
+      _client.setToken(newAccess);
+
+      // Retry original request with new token
+      final retryOptions = err.requestOptions;
+      retryOptions.headers['Authorization'] = 'Bearer $newAccess';
+      final retryResponse = await _refreshDio.fetch(retryOptions);
+      handler.resolve(retryResponse);
+    } catch (_) {
+      // Refresh failed — force logout
+      await _storage.deleteAll();
+      _client.clearToken();
+      handler.next(err);
+    }
+  }
 }
+
+// ── Error Interceptor ──────────────────────────────────────────────────────────
 
 class _ErrorInterceptor extends Interceptor {
   @override
@@ -111,7 +173,7 @@ class _ErrorInterceptor extends Interceptor {
         final detail = data['detail'];
         if (detail is Map<String, dynamic>) {
           message = detail['message'] as String? ?? message;
-          code = detail['code'] as String?;
+          code    = detail['error'] as String? ?? detail['code'] as String?;
         } else if (detail is String) {
           message = detail;
         }
@@ -121,7 +183,8 @@ class _ErrorInterceptor extends Interceptor {
         DioException(
           requestOptions: err.requestOptions,
           response: response,
-          error: ApiException(message: message, code: code, statusCode: response.statusCode),
+          error: ApiException(
+              message: message, code: code, statusCode: response.statusCode),
           type: err.type,
         ),
       );
@@ -131,7 +194,7 @@ class _ErrorInterceptor extends Interceptor {
   }
 }
 
-// ── Exception ─────────────────────────────────────────────────────────────────
+// ── Exception ──────────────────────────────────────────────────────────────────
 
 class ApiException implements Exception {
   final String message;
@@ -140,9 +203,11 @@ class ApiException implements Exception {
 
   const ApiException({required this.message, this.code, this.statusCode});
 
-  bool get isUnauthorized => statusCode == 401;
-  bool get isForbidden => statusCode == 403;
-  bool get isConflict => statusCode == 409;
+  bool get isUnauthorized        => statusCode == 401;
+  bool get isForbidden           => statusCode == 403;
+  bool get isPaymentRequired     => statusCode == 402;
+  bool get isConflict            => statusCode == 409;
+  bool get isGenerationLimitHit  => isPaymentRequired && code == 'generation_limit_exceeded';
 
   @override
   String toString() => 'ApiException($statusCode, $code): $message';

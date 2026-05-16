@@ -44,7 +44,17 @@ class PremiumTheme {
   static const Color lightTextSecondary = Color(0xFF5B21B6);
   static const Color lightTextTertiary = Color(0xFF7C3AED);
 
+  // ── Spec-aligned aliases (used by new screens) ────────────────────────────
+  // Mirror the prompt's naming: bgPrimary = darkBg, textPrimary = darkTextPrimary, etc.
+  static const Color bgPrimary     = darkBg;
+  static const Color bgSecondary   = darkSurface;
+  static const Color bgCard        = darkCard;
+  static const Color textPrimary   = darkTextPrimary;
+  static const Color textSecondary = darkTextSecondary;
+  static const Color textMuted     = darkTextTertiary;
+
   // ── Gradients ─────────────────────────────────────────────────────────────
+
 
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [primary, primaryDark],
@@ -83,6 +93,9 @@ class PremiumTheme {
 
   static TextStyle label(Color color) => GoogleFonts.outfit(
         fontSize: 12, fontWeight: FontWeight.w600, color: color, letterSpacing: 0.4);
+
+  static TextStyle caption(Color color) => GoogleFonts.outfit(
+        fontSize: 11, fontWeight: FontWeight.w400, color: color);
 
   // ── Dark ThemeData ────────────────────────────────────────────────────────
 

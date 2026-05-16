@@ -24,7 +24,9 @@ dependencies:
 
   # ── Auth & Secure Storage ──────────────────────────────────────────────────
   flutter_secure_storage: ^9.2.2
-  google_sign_in: ^6.2.2
+  app_links: ^6.3.2
+  flutter_web_auth_2: ^4.0.0
+  qr_flutter: ^4.1.0
 
   # ── Local Storage ──────────────────────────────────────────────────────────
   shared_preferences: ^2.3.3

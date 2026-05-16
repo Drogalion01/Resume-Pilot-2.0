@@ -3,7 +3,6 @@
 // Hero landing screen — first thing new users see.
 // Animated gradient background with floating orbs, brand mark, CTAs.
 
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';

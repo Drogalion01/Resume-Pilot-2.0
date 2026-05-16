@@ -64,7 +64,7 @@ class SettingsScreen extends ConsumerWidget {
             trailing: Switch(
               value: true,
               onChanged: (_) {}, // TODO: settings API
-              activeColor: PremiumTheme.accent,
+              activeThumbColor: PremiumTheme.accent,
             ),
           ).animate(delay: 150.ms).fadeIn(),
 

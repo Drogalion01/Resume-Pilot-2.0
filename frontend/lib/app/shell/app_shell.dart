@@ -2,28 +2,70 @@
 //
 // Shell scaffold with animated Material 3 bottom navigation bar.
 // Persistent across the 4 main tabs.
+//
+// Also owns the app_links deep link listener — any resumepilot:// URI
+// that arrives while the app is in foreground is routed here.
+// Cold-start deep links (app was closed) are handled by GoRouter's
+// initialLocation which reads the launch URI from app_links.
 
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../router/router.dart';
 import '../theme/premium_theme.dart';
 
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   final Widget child;
   const AppShell({super.key, required this.child});
 
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
   static const _tabs = [
-    (route: Routes.dashboard, icon: Icons.grid_view_rounded, label: 'Home'),
-    (route: Routes.applications, icon: Icons.work_outline_rounded, label: 'Track'),
-    (route: Routes.resumeLab, icon: Icons.auto_fix_high_rounded, label: 'AI Lab'),
-    (route: Routes.settings, icon: Icons.settings_outlined, label: 'Settings'),
+    (route: Routes.dashboard,    icon: Icons.grid_view_rounded,     label: 'Home'),
+    (route: Routes.applications, icon: Icons.work_outline_rounded,   label: 'Track'),
+    (route: Routes.resumeLab,    icon: Icons.auto_fix_high_rounded,  label: 'AI Lab'),
+    (route: Routes.settings,     icon: Icons.settings_outlined,      label: 'Settings'),
   ];
+
+  late final AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _appLinks = AppLinks();
+    _linkSub = _appLinks.uriLinkStream.listen(_handleIncomingLink);
+  }
+
+  @override
+  void dispose() {
+    _linkSub?.cancel();
+    super.dispose();
+  }
+
+  void _handleIncomingLink(Uri uri) {
+    if (!mounted) return;
+    // resumepilot://app/auth/verify?token=<token>
+    if (uri.host == 'app' && uri.pathSegments.first == 'auth') {
+      final path = '/${uri.pathSegments.join('/')}';
+      final query = uri.queryParameters.entries
+          .map((e) => '${e.key}=${e.value}')
+          .join('&');
+      context.go(query.isEmpty ? path : '$path?$query');
+    }
+  }
 
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     for (int i = 0; i < _tabs.length; i++) {
-      if (location.startsWith(_tabs[i].route)) return i;
+      if (location == _tabs[i].route ||
+          (i != 0 && location.startsWith(_tabs[i].route))) return i;
     }
     return 0;
   }
@@ -32,7 +74,7 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final idx = _currentIndex(context);
     return Scaffold(
-      body: child,
+      body: widget.child,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(

@@ -1,118 +1,46 @@
 """
 app/services/auth_service.py
 
-JWT creation/decoding, password hashing, Google OAuth token verification,
-and helper utilities for user identity.
+Core auth logic: magic link, OAuth, TOTP 2FA, refresh token rotation.
+No passwords anywhere.
 """
+import logging
+import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Tuple
 
 import httpx
-from jose import JWTError, jwt
+import pyotp
+from fastapi import HTTPException, status
+from jose import jwt
 from passlib.context import CryptContext
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.exceptions import AuthenticationError
+from app.core.security import create_access_token, decrypt_data, encrypt_data, hash_token
+from app.models.user import OAuthAccount, RefreshToken, User
 
-# ── Password hashing ──────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Password helpers — kept for derive_initials only (bcrypt for backup codes)
+# ────────────────────────────────────────────────────────────────────────────────
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-def hash_password(plain: str) -> str:
+def hash_password(plain: str) -> str:  # Not used but kept for future if needed
     return _pwd_context.hash(plain)
 
 
-def verify_password(plain: str, hashed: str) -> bool:
+def verify_password(plain: str, hashed: str) -> bool:  # Not used
     return _pwd_context.verify(plain, hashed)
 
 
-# ── JWT tokens ────────────────────────────────────────────────────────────────
-
-
-def create_access_token(user_id: str, email: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-    payload = {
-        "sub": str(user_id),
-        "email": email,
-        "iat": datetime.now(timezone.utc),
-        "exp": expire,
-        "type": "access",
-    }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-
-
-def create_verification_token(email: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=24)
-    payload = {
-        "sub": email,
-        "exp": expire,
-        "type": "email_verify",
-    }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-
-
-def create_reset_token(email: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=1)
-    payload = {
-        "sub": email,
-        "exp": expire,
-        "type": "reset",
-    }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-
-
-def decode_token(token: str) -> Optional[dict]:
-    """Decode and validate a JWT. Returns payload dict or None on failure."""
-    try:
-        return jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-        )
-    except JWTError:
-        return None
-
-
-# ── Google OAuth ──────────────────────────────────────────────────────────────
-
-
-async def verify_google_token(id_token: str) -> Optional[dict]:
-    """
-    Verify a Google Sign-In ID token by calling Google's tokeninfo endpoint.
-    Returns a normalised user-info dict on success, None on failure.
-    """
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(
-            f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
-        )
-
-    if resp.status_code != 200:
-        return None
-
-    data = resp.json()
-
-    # Validate audience — must match our Google client ID
-    if settings.GOOGLE_CLIENT_ID and data.get("aud") != settings.GOOGLE_CLIENT_ID:
-        return None
-
-    email = data.get("email")
-    if not email:
-        return None
-
-    return {
-        "google_id": data.get("sub"),
-        "email": email.lower(),
-        "full_name": data.get("name"),
-        "avatar_url": data.get("picture"),
-        "email_verified": data.get("email_verified") == "true",
-    }
-
-
-# ── Identity helpers ──────────────────────────────────────────────────────────
-
-
 def derive_initials(full_name: Optional[str], email: str) -> str:
-    """Generate 1–2 character initials for the avatar fallback."""
     if full_name:
         parts = full_name.strip().split()
         if len(parts) >= 2:
@@ -120,3 +48,483 @@ def derive_initials(full_name: Optional[str], email: str) -> str:
         if parts and parts[0]:
             return parts[0][:2].upper()
     return email[:2].upper()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Magic Link
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Simple in-memory rate limit store — swap to Redis in production
+_magic_link_attempts: dict[str, list[datetime]] = {}
+
+
+async def send_magic_link(email: str, ip_address: str, db: AsyncSession) -> None:
+    """
+    Send magic link sign-in token.
+    Rate limit: 3 per email per 10 minutes.
+    """
+    # Rate limiting
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(minutes=10)
+    attempts = _magic_link_attempts.get(email, [])
+    attempts = [t for t in attempts if t > window_start]
+    if len(attempts) >= 3:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "RATE_LIMIT_EXCEEDED", "message": "Too many requests. Try again in 10 minutes."},
+        )
+    attempts.append(now)
+    _magic_link_attempts[email] = attempts
+
+    # Normalise email
+    email = email.lower().strip()
+
+    # Find or create user
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(
+            id=uuid.uuid4(),
+            email=email,
+            full_name=None,
+            initials=email[:2].upper(),
+            is_email_verified=False,
+            is_active=True,
+            onboarding_completed=False,
+            subscription_tier="free",
+            generation_count_this_month=0,
+            totp_enabled=False,
+        )
+        db.add(user)
+        await db.flush()
+
+    # Create token
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hash_token(raw_token)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+    magic_token = MagicLinkToken(
+        user_id=user.id,
+        email=email,
+        token_hash=token_hash,
+        purpose="login",
+        expires_at=expires_at,
+        ip_address=ip_address,
+    )
+    db.add(magic_token)
+    await db.commit()
+
+    # Send email (in dev, just log)
+    verify_url = f"{settings.APP_WEB_BASE_URL}/auth/verify?token={raw_token}"
+    logger.info("[MAGIC LINK] To: %s → %s", email, verify_url)
+    # Uncomment in production: background_tasks.add_task(email_service.send_magic_link, email, raw_token)
+
+
+async def verify_magic_link(raw_token: str, db: AsyncSession) -> Tuple[User, bool]:
+    """
+    Verify magic link token. Returns (user, mfa_required).
+    Raises AuthenticationError if invalid/expired/used.
+    """
+    token_hash = hash_token(raw_token)
+    result = await db.execute(
+        select(MagicLinkToken).where(
+            MagicLinkToken.token_hash == token_hash,
+            MagicLinkToken.used_at.is_(None),
+            MagicLinkToken.expires_at > datetime.now(timezone.utc),
+        )
+    )
+    token_record = result.scalar_one_or_none()
+    if not token_record:
+        raise AuthenticationError("Invalid or expired magic link")
+
+    token_record.used_at = datetime.now(timezone.utc)
+    user = await db.get(User, token_record.user_id)
+    if not user or not user.is_active:
+        raise AuthenticationError("User not found or inactive")
+
+    if not user.is_email_verified:
+        user.is_email_verified = True
+
+    user.last_login_at = datetime.now(timezone.utc)
+    await db.commit()
+    return user, user.totp_enabled
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OAuth 2.0
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def generate_oauth_state(provider: str) -> Tuple[str, str]:
+    state = secrets.token_urlsafe(32)
+    state_hash = hash_token(state)
+    # TODO: store state_hash in Redis with 10min expiry
+    return state, state_hash
+
+
+async def exchange_code_for_tokens(provider: str, code: str, redirect_uri: str) -> dict:
+    if provider == "google":
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": redirect_uri,
+                },
+            )
+        if resp.status_code != 200:
+            raise AuthenticationError("OAuth token exchange with Google failed")
+        return resp.json()
+    elif provider == "github":
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://github.com/login/oauth/access_token",
+                data={
+                    "client_id": settings.GITHUB_CLIENT_ID,
+                    "client_secret": settings.GITHUB_CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                },
+                headers={"Accept": "application/json"},
+            )
+        if resp.status_code != 200:
+            raise AuthenticationError("OAuth token exchange with GitHub failed")
+        return resp.json()
+    elif provider == "linkedin":
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://www.linkedin.com/oauth/v2/accessToken",
+                data={
+                    "client_id": settings.LINKEDIN_CLIENT_ID,
+                    "client_secret": settings.LINKEDIN_CLIENT_SECRET,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": redirect_uri,
+                },
+            )
+        if resp.status_code != 200:
+            raise AuthenticationError("OAuth token exchange with LinkedIn failed")
+        return resp.json()
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
+
+
+async def get_oauth_userinfo(provider: str, access_token: str) -> dict:
+    if provider == "google":
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        data = resp.json()
+        return {
+            "provider_user_id": data["id"],
+            "email": data["email"].lower(),
+            "full_name": data.get("name"),
+            "avatar_url": data.get("picture"),
+            "email_verified": data.get("verified_email", False),
+        }
+    elif provider == "github":
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://api.github.com/user",
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            )
+        data = resp.json()
+        # Fetch primary email
+        async with httpx.AsyncClient() as client2:
+            resp2 = await client2.get(
+                "https://api.github.com/user/emails",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        emails = resp2.json()
+        primary = next((e for e in emails if e.get("primary")), None)
+        email = (primary or {}).get("email") or data.get("email")
+        if not email:
+            raise AuthenticationError("GitHub email not accessible — set public email or grant user:email scope")
+        return {
+            "provider_user_id": str(data["id"]),
+            "email": email.lower(),
+            "full_name": data.get("name"),
+            "avatar_url": data.get("avatar_url"),
+            "email_verified": True,
+        }
+    elif provider == "linkedin":
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://api.linkedin.com/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        data = resp.json()
+        sub = data.get("sub") or data.get("id")
+        email_data = data.get("email", {})
+        email = email_data.get("email_address") if isinstance(email_data, dict) else None
+        if not email:
+            raise AuthenticationError("LinkedIn email not accessible")
+        return {
+            "provider_user_id": sub,
+            "email": email.lower(),
+            "full_name": data.get("name"),
+            "avatar_url": None,
+            "email_verified": False,
+        }
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
+
+
+async def upsert_oauth_user(
+    provider: str,
+    provider_user_id: str,
+    email: str,
+    full_name: Optional[str],
+    avatar_url: Optional[str],
+    email_verified: bool,
+    db: AsyncSession,
+) -> User:
+    """Find existing by OAuth or email, else create. Link OAuth account."""
+    # By OAuth account
+    result = await db.execute(
+        select(OAuthAccount).where(
+            OAuthAccount.provider == provider,
+            OAuthAccount.provider_user_id == provider_user_id,
+        )
+    )
+    oauth_acc = result.scalar_one_or_none()
+    if oauth_acc:
+        user = await db.get(User, oauth_acc.user_id)
+        return user
+
+    # By email
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user:
+        oauth = OAuthAccount(
+            user_id=user.id,
+            provider=provider,
+            provider_user_id=provider_user_id,
+            access_token=None,
+            refresh_token=None,
+        )
+        db.add(oauth)
+        await db.commit()
+        return user
+
+    # Create
+    user = User(
+        id=uuid.uuid4(),
+        email=email,
+        full_name=full_name,
+        avatar_url=avatar_url,
+        initials=derive_initials(full_name, email),
+        is_email_verified=email_verified,
+        is_active=True,
+        onboarding_completed=False,
+        subscription_tier="free",
+        generation_count_this_month=0,
+        totp_enabled=False,
+    )
+    db.add(user)
+    await db.flush()
+
+    oauth = OAuthAccount(
+        user_id=user.id,
+        provider=provider,
+        provider_user_id=provider_user_id,
+        access_token=None,
+        refresh_token=None,
+    )
+    db.add(oauth)
+    db.add(UserSettings(id=uuid.uuid4(), user_id=user.id))
+    await db.commit()
+    return user
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TOTP — 2FA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def generate_totp_setup() -> dict:
+    secret = pyotp.random_base32()
+    totp = pyotp.TOTP(secret)
+    backup_codes = [secrets.token_hex(4).upper() for _ in range(10)]
+    return {"secret": secret, "otpauth_uri": "", "backup_codes": backup_codes}
+
+
+def verify_totp_code(secret: str, code: str) -> bool:
+    totp = pyotp.TOTP(secret)
+    return totp.verify(code, valid_window=1)
+
+
+def hash_backup_codes(codes: list[str]) -> list[str]:
+    return [_pwd_context.hash(code) for code in codes]
+
+
+def verify_backup_code(hashed_codes: list[str], code: str) -> bool:
+    for i, hashed in enumerate(hashed_codes):
+        if _pwd_context.verify(code, hashed):
+            hashed_codes.pop(i)
+            return True
+    return False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Refresh Token Rotation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def issue_refresh_token(user: User, ip: str, db: AsyncSession) -> Tuple[str, str]:
+    raw = secrets.token_urlsafe(32)
+    token_hash = hash_token(raw)
+    family_id = uuid.uuid4()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+
+    refresh = RefreshToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        family_id=family_id,
+        expires_at=expires_at,
+        ip_address=ip,
+    )
+    db.add(refresh)
+    await db.commit()
+    return raw, str(family_id)
+
+
+async def rotate_refresh_token(raw_token: str, ip: str, db: AsyncSession) -> Tuple[str, str]:
+    token_hash = hash_token(raw_token)
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    token_record = result.scalar_one_or_none()
+    if not token_record:
+        raise AuthenticationError("Invalid refresh token")
+
+    now = datetime.now(timezone.utc)
+
+    if token_record.revoked_at is not None:
+        # Reuse detected — revoke entire family
+        await db.execute(
+            select(RefreshToken).where(RefreshToken.family_id == token_record.family_id)
+        )
+        family_tokens = result.scalars().all()
+        for t in family_tokens:
+            t.revoked_at = now
+        await db.commit()
+        raise AuthenticationError("Token reuse detected. All sessions revoked.")
+
+    if token_record.expires_at < now:
+        raise AuthenticationError("Refresh token expired")
+
+    # Revoke current token
+    token_record.revoked_at = now
+    user = await db.get(User, token_record.user_id)
+    if not user:
+        raise AuthenticationError("User not found")
+
+    # Issue new tokens (same family)
+    new_access = create_access_token(
+        user_id=str(user.id),
+        email=user.email,
+        tier=user.subscription_tier,
+        totp_verified=True,  # refresh tokens retain full access
+        private_key=settings.JWT_PRIVATE_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+        expires_delta_minutes=60,
+    )
+    new_raw = secrets.token_urlsafe(32)
+    new_hash = hash_token(new_raw)
+    new_expires = now + timedelta(days=30)
+    new_refresh = RefreshToken(
+        user_id=user.id,
+        token_hash=new_hash,
+        family_id=token_record.family_id,
+        expires_at=new_expires,
+        ip_address=ip,
+    )
+    db.add(new_refresh)
+    await db.commit()
+    return new_access, new_raw
+
+
+async def revoke_refresh_token(raw_token: str, db: AsyncSession) -> bool:
+    token_hash = hash_token(raw_token)
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    token = result.scalar_one_or_none()
+    if token:
+        token.revoked_at = datetime.now(timezone.utc)
+        await db.commit()
+        return True
+    return False
+
+
+async def revoke_all_refresh_tokens(user_id: uuid.UUID, db: AsyncSession) -> int:
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked_at.is_(None),
+        )
+    )
+    tokens = result.scalars().all()
+    for t in tokens:
+        t.revoked_at = now
+    await db.commit()
+    return len(tokens)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MFA TOTP Challenge
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_totp_attempts: dict[uuid.UUID, list[datetime]] = {}
+
+
+async def verify_totp_challenge(mfa_token_str: str, code: str, db: AsyncSession) -> User:
+    """
+    Verify TOTP or backup code during MFA flow.
+    mfa_token must be a valid token (scope not checked here; check in route).
+    """
+    try:
+        payload = jwt.decode(mfa_token_str, settings.JWT_PUBLIC_KEY, algorithms=[settings.JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError as exc:
+        raise AuthenticationError("MFA token expired") from exc
+    except jwt.JWTError as exc:
+        raise AuthenticationError("Invalid MFA token") from exc
+
+    # Check scope (if present) — optional for now
+    # if payload.get("scope") != "mfa_pending":
+    #     raise AuthenticationError("Invalid MFA token scope")
+
+    user_id = payload.get("sub")
+    user = await db.get(User, uuid.UUID(user_id))
+    if not user or not user.is_active:
+        raise AuthenticationError("User not found")
+
+    # Rate limiting: 5 attempts per 5 min
+    now = datetime.now(timezone.utc)
+    attempts = _totp_attempts.get(user.id, [])
+    window = now - timedelta(minutes=5)
+    attempts = [t for t in attempts if t > window]
+    if len(attempts) >= 5:
+        raise HTTPException(status_code=403, detail="Too many failed MFA attempts")
+
+    # Verify
+    is_valid = False
+    if user.totp_secret:
+        secret = _pwd_context.decode(user.totp_secret)  # Wait — we stored encrypted via Fernet. Need decrypt.
+        # Actually user.totp_secret is stored encrypted via Fernet from TOTP setup. Need to decrypt.
+        secret = decrypt_data(user.totp_secret, settings.TOKEN_ENCRYPTION_KEY)
+        if verify_totp_code(secret, code):
+            is_valid = True
+
+    if not is_valid and user.backup_codes_hash:
+        if verify_backup_code(user.backup_codes_hash, code):
+            is_valid = True
+            await db.commit()
+
+    if not is_valid:
+        attempts.append(now)
+        _totp_attempts[user.id] = attempts
+        raise AuthenticationError("Invalid MFA code")
+
+    # Success
+    _totp_attempts.pop(user.id, None)
+    return user

@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, DateTime, String, Text, JSON, ForeignKey, UUID as PGUUID
+from sqlalchemy import Boolean, DateTime, String, Text, JSON, ForeignKey, UniqueConstraint, UUID as PGUUID
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -169,8 +169,7 @@ class OAuthAccount(Base, TimestampMixin):
     user: Mapped["User"] = relationship("User", back_populates="oauth_accounts")
 
     __table_args__ = (
-        # Ensure one provider account per user
-        # Note: unique constraint added at table level via __table_args__ if needed
+        UniqueConstraint('provider', 'provider_user_id', name='uq_oauth_provider_user_id'),
     )
 
 
