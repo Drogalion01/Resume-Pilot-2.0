@@ -10,6 +10,7 @@
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,7 +42,10 @@ void main() async {
 
   // Initialise Hive for offline cache
   await Hive.initFlutter();
-  final cacheDir = (await getApplicationDocumentsDirectory()).path;
+  String cacheDir = '';
+  if (!kIsWeb) {
+    cacheDir = (await getApplicationDocumentsDirectory()).path;
+  }
 
   // Initialize notifications
   await NotificationService().init();
