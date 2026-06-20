@@ -14,7 +14,9 @@ class NotificationService {
     tz.initializeTimeZones();
     try {
       final tzInfo = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(tzInfo.name));
+      // Handle both String (web) and TimezoneInfo (native)
+      final String timeZoneName = tzInfo is String ? tzInfo : (tzInfo as dynamic).name;
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
     } catch (e) {
       // Fallback
     }
@@ -34,7 +36,7 @@ class NotificationService {
     );
 
     await _flutterLocalNotificationsPlugin.initialize(
-      initializationSettings: initializationSettings,
+      initializationSettings,
       onDidReceiveNotificationResponse: (details) {
         // Handle notification tap
       },
