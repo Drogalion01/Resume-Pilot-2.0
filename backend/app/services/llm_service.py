@@ -2,19 +2,20 @@ import json
 import logging
 from typing import Optional, Dict, Any, Tuple
 import asyncio
-from anthropic import AsyncAnthropic
+from google import genai
+from google.genai import types
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Configure Anthropic
-if not settings.ENVIRONMENT == "development" or settings.ANTHROPIC_API_KEY:
-    client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+# Configure Gemini
+if not settings.ENVIRONMENT == "development" or settings.GEMINI_API_KEY:
+    client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
 else:
     client = None
 
-MODEL_NAME = "claude-3-5-haiku-20241022"
+MODEL_NAME = "gemini-1.5-flash"
 
 class LLMServiceError(Exception):
     pass
@@ -28,17 +29,7 @@ async def generate_tailored_resume(
     if not client:
         return _mock_tailored_resume()
 
-    system_prompt = [
-        {
-            "type": "text",
-            "text": "You are an expert resume writer and ATS specialist. Respond ONLY with valid JSON matching the provided schema. No markdown, no explanations.",
-        },
-        {
-            "type": "text",
-            "text": "Your task is to produce a TAILORED version of this master resume optimized specifically for the given role and score it.",
-            "cache_control": {"type": "ephemeral"}
-        }
-    ]
+    system_instruction = "You are an expert resume writer and ATS specialist. Respond ONLY with valid JSON matching the provided schema. No markdown, no explanations. Your task is to produce a TAILORED version of this master resume optimized specifically for the given role and score it."
 
     user_prompt = f"""
 MASTER RESUME (JSON):
@@ -50,16 +41,15 @@ JOB DESCRIPTION:
 {job_description}
 """
     try:
-        response = await client.messages.create(
+        response = await client.aio.models.generate_content(
             model=MODEL_NAME,
-            max_tokens=3000,
-            temperature=0.7,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_prompt}
-            ]
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.7,
+            ),
         )
-        text = response.content[0].text
+        text = response.text
         # Clean markdown codeblocks
         if text.startswith("```"):
             text = text.split("\n", 1)[1]
@@ -67,7 +57,7 @@ JOB DESCRIPTION:
                 text = text.rsplit("\n", 1)[0]
         return json.loads(text)
     except Exception as exc:
-        logger.exception("Anthropic resume generation failed")
+        logger.exception("Gemini resume generation failed")
         raise LLMServiceError("Failed to generate resume")
 
 async def generate_cover_letter(
@@ -80,7 +70,7 @@ async def generate_cover_letter(
     if not client:
         return _mock_cover_letter(job_title, company_name, user_name)
 
-    system_prompt = "You are an expert career writer. Write a compelling, concise cover letter for this candidate applying to the specified role. Exactly 3 paragraphs. Respond with plain text only. No JSON. No markdown."
+    system_instruction = "You are an expert career writer. Write a compelling, concise cover letter for this candidate applying to the specified role. Exactly 3 paragraphs. Respond with plain text only. No JSON. No markdown."
     
     summary = resume_version_json.get("summary", "")
     experience = "; ".join([
@@ -97,18 +87,17 @@ JOB DESCRIPTION:
 {job_description or "Not provided"}
 """
     try:
-        response = await client.messages.create(
+        response = await client.aio.models.generate_content(
             model=MODEL_NAME,
-            max_tokens=600,
-            temperature=0.8,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.8,
+            ),
         )
-        return response.content[0].text
+        return response.text
     except Exception as exc:
-        logger.exception("Anthropic cover letter generation failed")
+        logger.exception("Gemini cover letter generation failed")
         raise LLMServiceError("Failed to generate cover letter")
 
 async def generate_resume_and_cover_letter(
@@ -137,22 +126,21 @@ async def generate_linkedin_post(
     if not client:
         return f"I'm incredibly excited to announce that I've joined {company_name} as a {job_title}! 🎉 I can't wait to start this new journey and work with such an amazing team."
 
-    system_prompt = "You are a professional yet enthusiastic career coach. Write a single engaging LinkedIn post (max 150 words) announcing a new job. Use emojis appropriately but keep it professional. Do NOT include hashtags. Respond with the text of the post only."
+    system_instruction = "You are a professional yet enthusiastic career coach. Write a single engaging LinkedIn post (max 150 words) announcing a new job. Use emojis appropriately but keep it professional. Do NOT include hashtags. Respond with the text of the post only."
     prompt = f"Candidate name: {user_name or 'I'}. Job title: {job_title}. Company: {company_name}."
 
     try:
-        response = await client.messages.create(
+        response = await client.aio.models.generate_content(
             model=MODEL_NAME,
-            max_tokens=250,
-            temperature=0.8,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.8,
+            ),
         )
-        return response.content[0].text
+        return response.text
     except Exception as exc:
-        logger.exception("Anthropic linkedin post generation failed")
+        logger.exception("Gemini linkedin post generation failed")
         raise LLMServiceError("Failed to generate LinkedIn post")
 
 def _mock_tailored_resume() -> dict:

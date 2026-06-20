@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     # ── Encryption (Fernet — AES-256-GCM) ───────────────────────────────────────
     TOKEN_ENCRYPTION_KEY: str = ""  # base64url-encoded 32-byte key
 
-    # ── AI (Anthropic) ──────────────────────────────────────────────────────────
-    ANTHROPIC_API_KEY: str = ""
+    # ── AI (Gemini) ─────────────────────────────────────────────────────────────
+    GEMINI_API_KEY: str = ""
     ENVIRONMENT: str = "development"
 
     # ── Paddle (Monetization) ───────────────────────────────────────────────────
@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_REGION: str = "us-east-1"
     S3_BUCKET_NAME: str = ""
+    AWS_ENDPOINT_URL_S3: Optional[str] = None
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

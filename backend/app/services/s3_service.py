@@ -24,7 +24,7 @@ class S3Service:
             return None
             
         try:
-            async with self.session.client("s3") as s3:
+            async with self.session.client("s3", endpoint_url=settings.AWS_ENDPOINT_URL_S3) as s3:
                 await s3.put_object(
                     Bucket=self.bucket,
                     Key=object_name,
@@ -42,7 +42,7 @@ class S3Service:
             return None
             
         try:
-            async with self.session.client("s3") as s3:
+            async with self.session.client("s3", endpoint_url=settings.AWS_ENDPOINT_URL_S3) as s3:
                 response = await s3.generate_presigned_url(
                     'get_object',
                     Params={'Bucket': self.bucket, 'Key': object_name},
@@ -58,7 +58,7 @@ class S3Service:
             return False
             
         try:
-            async with self.session.client("s3") as s3:
+            async with self.session.client("s3", endpoint_url=settings.AWS_ENDPOINT_URL_S3) as s3:
                 await s3.delete_object(Bucket=self.bucket, Key=object_name)
                 return True
         except ClientError as e:

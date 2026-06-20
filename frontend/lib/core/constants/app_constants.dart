@@ -4,7 +4,7 @@ class AppConstants {
   AppConstants._();
 
   // ── API ────────────────────────────────────────────────────────────────────
-  static const String baseUrl = 'http://10.0.2.2:8000/api/v1'; // Android emulator → localhost
+  static const String baseUrl = 'https://resume-pilot-2-0.vercel.app/api/v1'; // Android emulator → localhost
   // static const String baseUrl = 'https://resumepilot-api.onrender.com/api/v1'; // Production
 
   // ── Secure Storage Keys ────────────────────────────────────────────────────
