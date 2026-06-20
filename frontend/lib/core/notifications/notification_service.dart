@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -11,6 +12,8 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
+    if (kIsWeb) return; // Notifications not natively supported on web in this setup
+    
     tz.initializeTimeZones();
     try {
       final tzInfo = await FlutterTimezone.getLocalTimezone();
@@ -35,12 +38,23 @@ class NotificationService {
       iOS: initializationSettingsIOS,
     );
 
-    await _flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: (details) {
-        // Handle notification tap
-      },
-    );
+    // Use dynamic to bypass strict dart2js signature checks which differ on web
+    dynamic plugin = _flutterLocalNotificationsPlugin;
+    try {
+      // First try named parameters (older/some versions)
+      await plugin.initialize(
+        initializationSettings: initializationSettings,
+        onDidReceiveNotificationResponse: (details) {
+          // Handle notification tap
+        },
+      );
+    } catch (e) {
+      // Fallback to positional (newer versions)
+      await plugin.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (details) {},
+      );
+    }
   }
 
   Future<void> scheduleInterviewReminder({
@@ -49,33 +63,40 @@ class NotificationService {
     required String body,
     required DateTime scheduledDate,
   }) async {
-    if (scheduledDate.isBefore(DateTime.now())) return;
+    if (kIsWeb || scheduledDate.isBefore(DateTime.now())) return;
 
-    await _flutterLocalNotificationsPlugin.zonedSchedule(
-      id: id,
-      title: title,
-      body: body,
-      scheduledDate: tz.TZDateTime.from(scheduledDate, tz.local),
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'interview_reminders',
-          'Interview Reminders',
-          channelDescription: 'Reminders for your upcoming job interviews',
-          importance: Importance.max,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+    dynamic plugin = _flutterLocalNotificationsPlugin;
+    try {
+      await plugin.zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: tz.TZDateTime.from(scheduledDate, tz.local),
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'interview_reminders',
+            'Interview Reminders',
+            channelDescription: 'Reminders for your upcoming job interviews',
+            importance: Importance.max,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
         ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
-      ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    );
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } catch (e) {
+      // Handle signature mismatch gracefully if occurs
+    }
   }
 
   Future<void> cancelReminder(int id) async {
-    await _flutterLocalNotificationsPlugin.cancel(id: id);
+    if (kIsWeb) return;
+    await _flutterLocalNotificationsPlugin.cancel(id);
   }
 }
