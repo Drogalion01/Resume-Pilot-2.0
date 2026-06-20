@@ -84,6 +84,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           return null;
 
         case AuthStateUnauthenticated() || AuthStateError():
+          if (location == Routes.splash) return Routes.landing;
           if (!isAuthRoute) return Routes.landing;
           return null;
       }
