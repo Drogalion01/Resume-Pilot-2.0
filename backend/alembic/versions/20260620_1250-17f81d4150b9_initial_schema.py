@@ -1,8 +1,8 @@
-"""initial schema
+"""Initial Schema
 
-Revision ID: 3fa8298eaf93
+Revision ID: 17f81d4150b9
 Revises: 
-Create Date: 2026-04-18 21:31:15.320365
+Create Date: 2026-06-20 12:50:14.602816
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '3fa8298eaf93'
+revision = '17f81d4150b9'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -34,9 +34,6 @@ def upgrade() -> None:
     sa.Column('generation_reset_date', sa.DateTime(timezone=True), nullable=True),
     sa.Column('last_login_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('last_login_ip', sa.String(length=45), nullable=True),
-    sa.Column('totp_secret', sa.Text(), nullable=True),
-    sa.Column('totp_enabled', sa.Boolean(), nullable=False),
-    sa.Column('backup_codes_hash', postgresql.JSONB(astext_type=Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('id')

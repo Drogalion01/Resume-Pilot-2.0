@@ -40,9 +40,9 @@ class Settings(BaseSettings):
     # ── Encryption (Fernet — AES-256-GCM) ───────────────────────────────────────
     TOKEN_ENCRYPTION_KEY: str = ""  # base64url-encoded 32-byte key
 
-    # ── AI (Gemini) ─────────────────────────────────────────────────────────────
-    GEMINI_API_KEY: str = ""
-    AI_MOCK_MODE: bool = True  # True = mock, False = real Gemini
+    # ── AI (Anthropic) ──────────────────────────────────────────────────────────
+    ANTHROPIC_API_KEY: str = ""
+    ENVIRONMENT: str = "development"
 
     # ── Generation limits ───────────────────────────────────────────────────────
     FREE_TIER_GENERATION_LIMIT: int = 3

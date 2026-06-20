@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.dependencies import CurrentUser, get_db
 from app.models.resume import AnalysisResult, Resume, ResumeVersion
 from app.models.user import User
@@ -21,6 +22,7 @@ from app.schemas.resume import (
     ResumeWithVersions,
     ResumeVersionCreateRequest,
     ResumeVersionOut,
+    ResumeListItem,
 )
 from app.services.resume_service import (
     analyze_resume,
@@ -28,7 +30,7 @@ from app.services.resume_service import (
     extract_text_from_file,
 )
 
-router = APIRouter(prefix="/resumes", tags=["Resumes"])
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Where to store uploaded files locally (Render ephemeral disk)

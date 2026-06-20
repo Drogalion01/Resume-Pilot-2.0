@@ -44,16 +44,6 @@ class _MagicLinkVerifyScreenState
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
 
-    // Navigate on MFA required
-    if (authState is AuthStateMFAPending && !_verified) {
-      _verified = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        context.go(Routes.totpChallenge,
-            extra: authState.mfaToken);
-      });
-    }
-
     // GoRouter redirect handles authenticated → dashboard automatically
     // Only handle error explicitly here
     return Scaffold(

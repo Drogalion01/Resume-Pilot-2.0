@@ -16,26 +16,25 @@ from app.database import get_db
 from app.models.user import User
 
 
+from fastapi.security import OAuth2PasswordBearer
+import uuid
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/auth/oauth/google/callback", auto_error=False)
+
 async def get_current_user(
-    token: str,
+    token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
-    Dependency that decodes JWT, validates scope (rejects mfa_pending),
+    Dependency that decodes JWT,
     fetches the User from DB, and returns the ORM object.
     """
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
         payload = verify_token(token, public_key=settings.JWT_PUBLIC_KEY, algorithm=settings.JWT_ALGORITHM)
-    except HTTPException:
-        raise
-
-    # MFA pending tokens have scope=mfa_pending and must not access resources
-    if payload.get("scope") == "mfa_pending":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="MFA verification required",
-            headers={"X-MFA-Required": "true"},
-        )
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     user_id = payload.get("sub")
     if not user_id:
@@ -44,7 +43,12 @@ async def get_current_user(
             detail="Invalid token payload",
         )
 
-    user = await db.get(User, user_id)
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user ID in token")
+        
+    user = await db.get(User, user_uuid)
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

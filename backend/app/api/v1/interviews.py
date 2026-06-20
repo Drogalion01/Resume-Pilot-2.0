@@ -13,7 +13,7 @@ from app.models.tracker import Application, Interview
 from app.schemas.application import InterviewOut
 from app.schemas.interview import InterviewCreate, InterviewUpdate
 
-router = APIRouter(prefix="/interviews", tags=["Interviews"])
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 

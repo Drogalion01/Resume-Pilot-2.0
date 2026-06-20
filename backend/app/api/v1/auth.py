@@ -14,20 +14,15 @@ from app.core.dependencies import CurrentUser, get_db
 from app.core.exceptions import AuthenticationError
 from app.limiter import limiter
 from app.models.user import OAuthAccount, RefreshToken, User
-from app.schemas.auth import (
     AuthResponse,
-    MFARequiredResponse,
     OAuthAuthorizeRequest,
     OAuthCallbackRequest,
     RefreshTokenRequest,
-    TOTPConfirmRequest,
-    TOTPSetupResponse,
-    TOTPVerifyRequest,
 )
 from app.schemas.user import CompleteOnboardingRequest, MeResponse
 from app.services import auth_service, email_service
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
@@ -57,7 +52,7 @@ async def magic_link_send(
         raise HTTPException(status_code=500, detail="Failed to send magic link")
 
 
-@router.post("/magic-link/verify", response_model=AuthResponse | MFARequiredResponse)
+@router.post("/magic-link/verify", response_model=AuthResponse)
 async def magic_link_verify(
     token: str,
     db: AsyncSession = Depends(get_db),
@@ -68,19 +63,7 @@ async def magic_link_verify(
         logger.warning("Magic link verify failed: %s", exc)
         raise HTTPException(status_code=401, detail=str(exc))
 
-    if mfa_required:
-        mfa_token = auth_service.create_access_token(
-            user_id=str(user.id),
-            email=user.email,
-            tier=user.subscription_tier,
-            totp_verified=False,
-            private_key=settings.JWT_PRIVATE_KEY,
-            algorithm=settings.JWT_ALGORITHM,
-            expires_delta_minutes=5,
-        )
-        return MFARequiredResponse(mfa_token=mfa_token)
-
-    access = await auth_service.issue_access_token(user, totp_verified=True)
+    access = await auth_service.issue_access_token(user)
     refresh, _ = await auth_service.issue_refresh_token(user, "0.0.0.0", db)
     return AuthResponse(
         access_token=access,
@@ -125,7 +108,7 @@ async def oauth_authorize(provider: str, redirect_uri: str):
     return {"authorization_url": auth_url, "state": state}
 
 
-@router.post("/oauth/{provider}/callback", response_model=AuthResponse | MFARequiredResponse)
+@router.post("/oauth/{provider}/callback", response_model=AuthResponse)
 async def oauth_callback(
     provider: str,
     body: OAuthCallbackRequest,
@@ -152,19 +135,7 @@ async def oauth_callback(
         db=db,
     )
 
-    if user.totp_enabled:
-        mfa_token = auth_service.create_access_token(
-            user_id=str(user.id),
-            email=user.email,
-            tier=user.subscription_tier,
-            totp_verified=False,
-            private_key=settings.JWT_PRIVATE_KEY,
-            algorithm=settings.JWT_ALGORITHM,
-            expires_delta_minutes=5,
-        )
-        return MFARequiredResponse(mfa_token=mfa_token)
-
-    access = await auth_service.issue_access_token(user, totp_verified=True)
+    access = await auth_service.issue_access_token(user)
     refresh, _ = await auth_service.issue_refresh_token(user, request.client.host if request.client else "0.0.0.0", db)
     return AuthResponse(
         access_token=access,
@@ -173,78 +144,6 @@ async def oauth_callback(
     )
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TOTP 2FA
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Note: Some TOTP endpoints require an mfa_token (short-lived JWT with scope=mfa_pending)
-# For MVP we'll accept mfa_token as query param or header via custom dependency. Simplify: as query.
-
-@router.post("/totp/verify", response_model=AuthResponse)
-async def totp_verify(
-    code: str,
-    mfa_token: str,
-    db: AsyncSession = Depends(get_db),
-):
-    user = await auth_service.verify_totp_challenge(mfa_token, code, db)
-    access = await auth_service.issue_access_token(user, totp_verified=True)
-    refresh, _ = await auth_service.issue_refresh_token(user, "0.0.0.0", db)
-    return AuthResponse(
-        access_token=access,
-        refresh_token=refresh,
-        user=MeResponse.user.model_validate(user),
-    )
-
-
-@router.get("/totp/setup", response_model=TOTPSetupResponse)
-async def totp_setup(current_user: CurrentUser):
-    data = auth_service.generate_totp_setup()
-    import pyotp
-    totp = pyotp.TOTP(data["secret"])
-    data["otpauth_uri"] = totp.provisioning_uri(
-        name=current_user.email,
-        issuer_name="ResumePilot",
-    )
-    return TOTPSetupResponse(**data)
-
-
-@router.post("/totp/setup/confirm", response_model=dict)
-async def totp_setup_confirm(
-    secret: str,
-    code: str,
-    current_user: CurrentUser,
-    db: AsyncSession = Depends(get_db),
-):
-    """Confirm TOTP setup. Frontend sends the secret (from /totp/setup) and first code."""
-    import pyotp
-    totp = pyotp.TOTP(secret)
-    if not totp.verify(code, valid_window=1):
-        raise HTTPException(status_code=400, detail="Invalid verification code")
-
-    encrypted_secret = auth_service.encrypt_data(secret, settings.TOKEN_ENCRYPTION_KEY)
-    current_user.totp_secret = encrypted_secret
-    current_user.totp_enabled = True
-    current_user.backup_codes_hash = auth_service.hash_backup_codes([secrets.token_hex(4).upper() for _ in range(10)])  # placeholder
-    await db.commit()
-    return {"totp_enabled": True, "message": "TOTP enabled"}
-
-
-@router.delete("/totp/disable", response_model=dict)
-async def totp_disable(
-    code: str,
-    current_user: CurrentUser,
-    db: AsyncSession = Depends(get_db),
-):
-    if not current_user.totp_secret:
-        raise HTTPException(status_code=400, detail="TOTP not enabled")
-    secret = auth_service.decrypt_data(current_user.totp_secret, settings.TOKEN_ENCRYPTION_KEY)
-    if not auth_service.verify_totp_code(secret, code):
-        raise HTTPException(status_code=400, detail="Invalid code")
-    current_user.totp_enabled = False
-    current_user.totp_secret = None
-    current_user.backup_codes_hash = None
-    await db.commit()
-    return {"totp_enabled": False}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -325,7 +224,7 @@ async def complete_onboarding(
     await db.commit()
     await db.refresh(current_user)
 
-    access = await auth_service.issue_access_token(current_user, totp_verified=current_user.totp_enabled)
+    access = await auth_service.issue_access_token(current_user)
     refresh, _ = await auth_service.issue_refresh_token(current_user, "0.0.0.0", db)
     return AuthResponse(
         access_token=access,

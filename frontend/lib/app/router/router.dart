@@ -17,8 +17,13 @@ import '../../core/auth/auth_state.dart';
 import '../../features/auth/screens/landing_screen.dart';
 import '../../features/auth/screens/magic_link_screen.dart';
 import '../../features/auth/screens/magic_link_verify_screen.dart';
-import '../../features/auth/screens/totp_challenge_screen.dart';
-import '../../features/auth/screens/totp_setup_screen.dart';
+import '../../features/applications/screens/application_list_screen.dart';
+import '../../features/applications/screens/application_detail_screen.dart';
+import '../../features/resume_lab/screens/generate_screen.dart';
+import '../../features/resume_lab/screens/generation_result_screen.dart';
+import '../../features/resume_lab/screens/resume_detail_screen.dart';
+import '../../features/resume_lab/screens/resume_list_screen.dart';
+import '../../features/resume_lab/screens/upload_resume_screen.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../shared/screens/splash_screen.dart';
@@ -31,8 +36,6 @@ class Routes {
   static const landing         = '/landing';
   static const magicLink       = '/auth/magic-link';
   static const magicLinkVerify = '/auth/verify';   // deep link: ?token=
-  static const totpChallenge   = '/auth/totp';
-  static const totpSetup       = '/auth/totp/setup';
 
   // Shell tabs
   static const dashboard   = '/';
@@ -44,7 +47,7 @@ class Routes {
   static const upload      = '/resume-lab/upload';
   static const generate    = '/resume-lab/generate';
   static const generationResult = '/resume-lab/result';
-  static const applicationDetail = '/applications/detail';
+  static const applicationDetail = '/applications'; // Used prefix for detail id
 }
 
 // ── Provider ───────────────────────────────────────────────────────────────────
@@ -64,16 +67,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         Routes.landing,
         Routes.magicLink,
         Routes.magicLinkVerify,
-        Routes.totpChallenge,
       ].any((r) => location.startsWith(r));
 
       switch (authState) {
         case AuthStateInitial() || AuthStateLoading():
           return location == Routes.splash ? null : Routes.splash;
-
-        case AuthStateMFAPending():
-          if (location == Routes.totpChallenge) return null;
-          return Routes.totpChallenge;
 
         case AuthStateMagicLinkSent():
           if (location == Routes.magicLink) return null;
@@ -108,20 +106,37 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
-      // TOTP challenge — receives mfaToken via extras
+      // ── Resume Lab (Full Screen) ─────────────────────────────────────────
       GoRoute(
-        path: Routes.totpChallenge,
+        path: Routes.generate,
         builder: (_, state) {
-          final mfaToken = state.extra as String?;
-          // If extra is null, fall back to the MFAPending state value
-          return TotpChallengeScreen(mfaToken: mfaToken ?? '');
+          final resumeId = state.extra as String;
+          return GenerateScreen(resumeId: resumeId);
+        },
+      ),
+      GoRoute(
+        path: Routes.generationResult,
+        builder: (_, __) => const GenerationResultScreen(),
+      ),
+      GoRoute(
+        path: '${Routes.resumeLab}/:id',
+        builder: (_, state) {
+          final id = state.pathParameters['id']!;
+          return ResumeDetailScreen(resumeId: id);
         },
       ),
 
-      // TOTP setup — push from settings
       GoRoute(
-        path: Routes.totpSetup,
-        builder: (_, __) => const TotpSetupScreen(),
+        path: Routes.upload,
+        builder: (_, __) => const UploadResumeScreen(),
+      ),
+
+      GoRoute(
+        path: '${Routes.applications}/:id',
+        builder: (_, state) {
+          final id = state.pathParameters['id']!;
+          return ApplicationDetailScreen(applicationId: id);
+        },
       ),
 
       // ── App shell with bottom navigation ─────────────────────────────────
@@ -134,11 +149,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: Routes.applications,
-            builder: (_, __) => const PlaceholderScreen(label: 'Applications', icon: Icons.work_outline_rounded),
+            builder: (_, __) => const ApplicationListScreen(),
           ),
           GoRoute(
             path: Routes.resumeLab,
-            builder: (_, __) => const PlaceholderScreen(label: 'Resume Lab', icon: Icons.description_outlined),
+            builder: (_, __) => const ResumeListScreen(),
           ),
           GoRoute(
             path: Routes.settings,

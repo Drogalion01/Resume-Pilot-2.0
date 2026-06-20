@@ -8,6 +8,8 @@ import '../../../app/theme/premium_theme.dart';
 import '../../../core/auth/auth_notifier.dart';
 import '../../../core/auth/auth_state.dart';
 import '../../../shared/providers/theme_provider.dart';
+import '../providers/session_provider.dart';
+import 'package:intl/intl.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -67,6 +69,17 @@ class SettingsScreen extends ConsumerWidget {
               activeThumbColor: PremiumTheme.accent,
             ),
           ).animate(delay: 150.ms).fadeIn(),
+
+          const SizedBox(height: 24),
+
+          // Security
+          _SectionHeader('Security'),
+          _SettingsTile(
+            icon: Icons.devices_rounded,
+            title: 'Active Sessions',
+            subtitle: 'Manage your logged-in devices',
+            onTap: () => _showSessionsModal(context, ref),
+          ).animate(delay: 175.ms).fadeIn(),
 
           const SizedBox(height: 24),
 
@@ -179,6 +192,115 @@ class SettingsScreen extends ConsumerWidget {
             },
             child: Text('Sign Out', style: TextStyle(color: PremiumTheme.error)),
           ),
+        ],
+      ),
+    );
+  }
+
+  void _showSessionsModal(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _SessionsSheet(),
+    );
+  }
+}
+
+class _SessionsSheet extends ConsumerWidget {
+  const _SessionsSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessionsAsync = ref.watch(sessionListProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: const BoxDecoration(
+        color: PremiumTheme.bgPrimary,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Active Sessions', style: PremiumTheme.headline3(PremiumTheme.textPrimary)),
+              IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          sessionsAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (e, _) => Padding(
+              padding: const EdgeInsets.all(32),
+              child: Center(child: Text('Failed to load: $e', style: PremiumTheme.body(PremiumTheme.error))),
+            ),
+            data: (sessions) {
+              if (sessions.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(child: Text('No active sessions found.', style: PremiumTheme.body(PremiumTheme.textSecondary))),
+                );
+              }
+              return Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: sessions.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (_, i) {
+                    final session = sessions[i];
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: PremiumTheme.bgCard,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: PremiumTheme.darkBorder),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.computer_rounded, color: PremiumTheme.accent, size: 24),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  session.userAgent ?? 'Unknown Device',
+                                  style: PremiumTheme.body(PremiumTheme.textPrimary).copyWith(fontWeight: FontWeight.w600),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Last active: ${DateFormat('MMM d, h:mm a').format(session.lastActive)}\nIP: ${session.ipAddress ?? "Unknown"}',
+                                  style: PremiumTheme.bodySmall(PremiumTheme.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.logout_rounded, color: PremiumTheme.error),
+                            onPressed: () => ref.read(sessionListProvider.notifier).revoke(session.familyId),
+                            tooltip: 'Revoke Session',
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );

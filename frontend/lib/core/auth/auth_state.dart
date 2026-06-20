@@ -27,12 +27,7 @@ class AuthStateMagicLinkSent extends AuthState {
   const AuthStateMagicLinkSent({required this.email});
 }
 
-/// First factor complete (magic link or OAuth) but TOTP is required.
-/// [mfaToken] is the short-lived JWT (scope=mfa_pending, 5 min).
-class AuthStateMFAPending extends AuthState {
-  final String mfaToken;
-  const AuthStateMFAPending({required this.mfaToken});
-}
+
 
 /// User is fully authenticated with a valid JWT + optional TOTP.
 class AuthStateAuthenticated extends AuthState {

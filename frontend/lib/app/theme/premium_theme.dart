@@ -135,7 +135,7 @@ class PremiumTheme {
           fontWeight: FontWeight.w600,
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: darkCard,
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -265,7 +265,7 @@ class PremiumTheme {
         titleTextStyle: GoogleFonts.outfit(
           color: lightTextPrimary, fontSize: 18, fontWeight: FontWeight.w600),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: lightSurface,
         elevation: 0,
         shape: RoundedRectangleBorder(

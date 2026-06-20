@@ -23,7 +23,7 @@ from app.database import Base
 # ── Import ALL models so they register with Base.metadata ─────────────────────
 from app.models.user import User, UserSettings, OAuthAccount, MagicLinkToken, RefreshToken  # noqa: F401
 from app.models.resume import Resume, ResumeVersion, AnalysisResult  # noqa: F401
-from app.models.tracker import (                         # noqa: F401
+from app.models.application import (                         # noqa: F401
     Application, Interview, Reminder, Note, TimelineEvent,
     ApplicationStatus, InterviewType,
 )

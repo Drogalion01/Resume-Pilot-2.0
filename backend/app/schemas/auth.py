@@ -33,13 +33,6 @@ class OAuthCallbackRequest(BaseModel):
     redirect_uri: str
 
 
-class TOTPVerifyRequest(BaseModel):
-    code: str = Field(..., min_length=6, max_length=8, description="6-digit TOTP or 8-char backup code")
-
-
-class TOTPConfirmRequest(BaseModel):
-    code: str = Field(..., min_length=6, max_length=6, description="6-digit TOTP to confirm setup")
-
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., min_length=1)
@@ -70,17 +63,6 @@ class AuthResponse(BaseModel):
     refresh_token: str
     user: UserOut
 
-
-class MFARequiredResponse(BaseModel):
-    """Returned when MFA is required to complete login."""
-    mfa_token: str
-    mfa_required: bool = True
-
-
-class TOTPSetupResponse(BaseModel):
-    secret: str
-    otpauth_uri: str
-    backup_codes: list[str]
 
 
 class SubscriptionStatus(BaseModel):

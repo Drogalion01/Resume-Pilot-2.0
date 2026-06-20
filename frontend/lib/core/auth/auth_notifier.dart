@@ -151,21 +151,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  // ── TOTP ─────────────────────────────────────────────────────────────────────
 
-  Future<void> verifyTotp(String mfaToken, String code) async {
-    state = const AuthStateLoading();
-    try {
-      final res = await _client.dio.post(
-        '/auth/totp/verify',
-        queryParameters: {'mfa_token': mfaToken, 'code': code},
-      );
-      _handleAuthResponse(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      state = AuthStateMFAPending(mfaToken: mfaToken); // keep on screen with error
-      // surface error via a separate mechanism — keep MFAPending so screen stays
-    }
-  }
 
   // ── Logout ───────────────────────────────────────────────────────────────────
 
@@ -193,13 +179,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
-  /// Handles both AuthResponse {access_token, refresh_token, user}
-  /// and MFARequiredResponse {mfa_token, mfa_required: true}.
+  /// Handles AuthResponse {access_token, refresh_token, user}
   void _handleAuthResponse(Map<String, dynamic> data) {
-    if (data['mfa_required'] == true) {
-      state = AuthStateMFAPending(mfaToken: data['mfa_token'] as String);
-      return;
-    }
     _persistSession(data);
   }
 

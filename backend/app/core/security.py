@@ -41,7 +41,7 @@ def create_access_token(
     user_id: str,
     email: str,
     tier: str = "free",
-    totp_verified: bool = False,
+
     private_key: str = "",
     algorithm: str = "RS256",
     expires_in_minutes: int = 60,
@@ -56,7 +56,6 @@ def create_access_token(
         "sub": str(user_id),
         "email": email,
         "tier": tier,
-        "totp_verified": totp_verified,
         "iat": now,
         "exp": expire,
     }

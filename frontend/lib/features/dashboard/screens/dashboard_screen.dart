@@ -7,9 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/router/router.dart';
 import '../../../app/theme/premium_theme.dart';
 import '../../../core/auth/auth_notifier.dart';
 import '../../../core/auth/auth_state.dart';
+import '../providers/dashboard_provider.dart';
+import 'package:go_router/go_router.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -19,8 +22,10 @@ class DashboardScreen extends ConsumerWidget {
     final authState = ref.watch(authNotifierProvider);
     final user = authState is AuthStateAuthenticated ? authState.user : null;
 
+    final dashboardAsync = ref.watch(dashboardProvider);
+
     return Scaffold(
-      backgroundColor: PremiumTheme.darkBg,
+      backgroundColor: PremiumTheme.bgPrimary,
       appBar: AppBar(
         title: Image.asset('assets/images/logo.png',
             height: 28, errorBuilder: (_, __, ___) => const Text('ResumePilot')),
@@ -28,7 +33,7 @@ class DashboardScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: GestureDetector(
-              onTap: () {}, // TODO: profile
+              onTap: () => context.push(Routes.settings),
               child: CircleAvatar(
                 radius: 18,
                 backgroundColor: PremiumTheme.primary.withOpacity(0.2),
@@ -41,49 +46,55 @@ class DashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Greeting
-            Text(
-              'Hey, ${user?.displayName ?? 'there'} 👋',
-              style: PremiumTheme.headline3(PremiumTheme.darkTextPrimary),
-            ).animate().fadeIn().slideY(begin: 0.2),
-            const SizedBox(height: 4),
-            Text(
-              'Let\'s get you closer to your dream job.',
-              style: PremiumTheme.body(PremiumTheme.darkTextSecondary),
-            ).animate(delay: 100.ms).fadeIn(),
-
-            const SizedBox(height: 28),
-
-            // Stats row
-            Row(
+      body: dashboardAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Failed to load: $e')),
+        data: (data) => RefreshIndicator(
+          onRefresh: () async => ref.refresh(dashboardProvider.future),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StatCard(value: '0', label: 'Resumes', icon: Icons.description_outlined),
-                const SizedBox(width: 12),
-                _StatCard(value: '0', label: 'Applied', icon: Icons.send_outlined),
-                const SizedBox(width: 12),
-                _StatCard(value: '0', label: 'Interviews', icon: Icons.calendar_today_outlined),
-              ],
-            ).animate(delay: 200.ms).fadeIn().slideY(begin: 0.2),
+                // Greeting
+                Text(
+                  'Hey, ${user?.displayName ?? 'there'} 👋',
+                  style: PremiumTheme.headline3(PremiumTheme.textPrimary),
+                ).animate().fadeIn().slideY(begin: 0.2),
+                const SizedBox(height: 4),
+                Text(
+                  data.insight['message'] ?? 'Let\'s get you closer to your dream job.',
+                  style: PremiumTheme.body(PremiumTheme.textSecondary),
+                ).animate(delay: 100.ms).fadeIn(),
+
+                const SizedBox(height: 28),
+
+                // Stats row
+                Row(
+                  children: [
+                    _StatCard(value: data.summary['total_resumes'].toString(), label: 'Resumes', icon: Icons.description_outlined),
+                    const SizedBox(width: 12),
+                    _StatCard(value: data.summary['total_applications'].toString(), label: 'Applied', icon: Icons.send_outlined),
+                    const SizedBox(width: 12),
+                    _StatCard(value: data.summary['total_interviews'].toString(), label: 'Interviews', icon: Icons.calendar_today_outlined),
+                  ],
+                ).animate(delay: 200.ms).fadeIn().slideY(begin: 0.2),
 
             const SizedBox(height: 28),
 
             // Quick actions
             Text('Quick Actions',
-                style: PremiumTheme.headline3(PremiumTheme.darkTextPrimary))
+                style: PremiumTheme.headline3(PremiumTheme.textPrimary))
                 .animate(delay: 300.ms).fadeIn(),
             const SizedBox(height: 16),
 
             _QuickActionCard(
               icon: Icons.upload_file_rounded,
-              title: 'Analyse Resume',
-              subtitle: 'Upload PDF or DOCX • Get ATS score',
+              title: 'Upload Resume',
+              subtitle: 'Add your master resume to start',
               color: PremiumTheme.primary,
-              onTap: () {}, // TODO: Phase 2
+              onTap: () => context.push(Routes.upload),
             ).animate(delay: 350.ms).fadeIn().slideX(begin: -0.1),
 
             const SizedBox(height: 12),
@@ -93,7 +104,7 @@ class DashboardScreen extends ConsumerWidget {
               title: 'Track Application',
               subtitle: 'Add a new job application',
               color: PremiumTheme.info,
-              onTap: () {}, // TODO: Phase 3
+              onTap: () => context.push(Routes.applications),
             ).animate(delay: 400.ms).fadeIn().slideX(begin: -0.1),
 
             const SizedBox(height: 12),
@@ -101,9 +112,9 @@ class DashboardScreen extends ConsumerWidget {
             _QuickActionCard(
               icon: Icons.auto_fix_high_rounded,
               title: 'AI Resume Lab',
-              subtitle: 'Rewrite bullets • Generate cover letter',
-              color: PremiumTheme.accentPink,
-              onTap: () {}, // TODO: Phase 4
+              subtitle: 'View your tailored resumes',
+              color: PremiumTheme.accent,
+              onTap: () => context.push(Routes.resumeLab),
             ).animate(delay: 450.ms).fadeIn().slideX(begin: -0.1),
 
             const SizedBox(height: 28),
@@ -118,6 +129,7 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(height: 100),
           ],
         ),
+      ),
       ),
     );
   }
@@ -135,7 +147,7 @@ class _StatCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
           decoration: BoxDecoration(
-            color: PremiumTheme.darkCard,
+            color: PremiumTheme.bgCard,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: PremiumTheme.darkBorder),
           ),
@@ -144,9 +156,9 @@ class _StatCard extends StatelessWidget {
               Icon(icon, color: PremiumTheme.accent, size: 20),
               const SizedBox(height: 8),
               Text(value,
-                  style: PremiumTheme.headline3(PremiumTheme.darkTextPrimary)),
+                  style: PremiumTheme.headline3(PremiumTheme.textPrimary)),
               const SizedBox(height: 4),
-              Text(label, style: PremiumTheme.bodySmall(PremiumTheme.darkTextSecondary)),
+              Text(label, style: PremiumTheme.bodySmall(PremiumTheme.textSecondary)),
             ],
           ),
         ),
@@ -174,7 +186,7 @@ class _QuickActionCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: PremiumTheme.darkCard,
+            color: PremiumTheme.bgCard,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: PremiumTheme.darkBorder),
           ),
@@ -195,11 +207,11 @@ class _QuickActionCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(title,
-                        style: PremiumTheme.body(PremiumTheme.darkTextPrimary)
+                        style: PremiumTheme.body(PremiumTheme.textPrimary)
                             .copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(subtitle,
-                        style: PremiumTheme.bodySmall(PremiumTheme.darkTextTertiary)),
+                        style: PremiumTheme.bodySmall(PremiumTheme.textSecondary)),
                   ],
                 ),
               ),
@@ -226,22 +238,22 @@ class _EmptySection extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: PremiumTheme.headline3(PremiumTheme.darkTextPrimary)),
+          Text(title, style: PremiumTheme.headline3(PremiumTheme.textPrimary)),
           const SizedBox(height: 12),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 32),
             decoration: BoxDecoration(
-              color: PremiumTheme.darkCard,
+              color: PremiumTheme.bgCard,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: PremiumTheme.darkBorder),
             ),
             child: Column(
               children: [
-                Icon(icon, color: PremiumTheme.darkTextTertiary, size: 32),
+                Icon(icon, color: PremiumTheme.textMuted, size: 32),
                 const SizedBox(height: 8),
                 Text(emptyMessage,
-                    style: PremiumTheme.body(PremiumTheme.darkTextTertiary)),
+                    style: PremiumTheme.body(PremiumTheme.textSecondary)),
               ],
             ),
           ),

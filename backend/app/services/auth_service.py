@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 import httpx
-import pyotp
 from fastapi import HTTPException, status
 from jose import jwt
 from passlib.context import CryptContext
@@ -93,7 +92,6 @@ async def send_magic_link(email: str, ip_address: str, db: AsyncSession) -> None
             onboarding_completed=False,
             subscription_tier="free",
             generation_count_this_month=0,
-            totp_enabled=False,
         )
         db.add(user)
         await db.flush()
@@ -119,9 +117,9 @@ async def send_magic_link(email: str, ip_address: str, db: AsyncSession) -> None
     # Uncomment in production: background_tasks.add_task(email_service.send_magic_link, email, raw_token)
 
 
-async def verify_magic_link(raw_token: str, db: AsyncSession) -> Tuple[User, bool]:
+async def verify_magic_link(raw_token: str, db: AsyncSession) -> User:
     """
-    Verify magic link token. Returns (user, mfa_required).
+    Verify magic link token.
     Raises AuthenticationError if invalid/expired/used.
     """
     token_hash = hash_token(raw_token)
@@ -146,7 +144,7 @@ async def verify_magic_link(raw_token: str, db: AsyncSession) -> Tuple[User, boo
 
     user.last_login_at = datetime.now(timezone.utc)
     await db.commit()
-    return user, user.totp_enabled
+    return user
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -322,7 +320,6 @@ async def upsert_oauth_user(
         onboarding_completed=False,
         subscription_tier="free",
         generation_count_this_month=0,
-        totp_enabled=False,
     )
     db.add(user)
     await db.flush()
@@ -341,36 +338,18 @@ async def upsert_oauth_user(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TOTP — 2FA
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def generate_totp_setup() -> dict:
-    secret = pyotp.random_base32()
-    totp = pyotp.TOTP(secret)
-    backup_codes = [secrets.token_hex(4).upper() for _ in range(10)]
-    return {"secret": secret, "otpauth_uri": "", "backup_codes": backup_codes}
-
-
-def verify_totp_code(secret: str, code: str) -> bool:
-    totp = pyotp.TOTP(secret)
-    return totp.verify(code, valid_window=1)
-
-
-def hash_backup_codes(codes: list[str]) -> list[str]:
-    return [_pwd_context.hash(code) for code in codes]
-
-
-def verify_backup_code(hashed_codes: list[str], code: str) -> bool:
-    for i, hashed in enumerate(hashed_codes):
-        if _pwd_context.verify(code, hashed):
-            hashed_codes.pop(i)
-            return True
-    return False
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # Refresh Token Rotation
 # ═══════════════════════════════════════════════════════════════════════════════
+
+async def issue_access_token(user: User) -> str:
+    return create_access_token(
+        user_id=str(user.id),
+        email=user.email,
+        tier=user.subscription_tier,
+        private_key=settings.JWT_PRIVATE_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+        expires_delta_minutes=60,
+    )
 
 async def issue_refresh_token(user: User, ip: str, db: AsyncSession) -> Tuple[str, str]:
     raw = secrets.token_urlsafe(32)
@@ -419,16 +398,7 @@ async def rotate_refresh_token(raw_token: str, ip: str, db: AsyncSession) -> Tup
     if not user:
         raise AuthenticationError("User not found")
 
-    # Issue new tokens (same family)
-    new_access = create_access_token(
-        user_id=str(user.id),
-        email=user.email,
-        tier=user.subscription_tier,
-        totp_verified=True,  # refresh tokens retain full access
-        private_key=settings.JWT_PRIVATE_KEY,
-        algorithm=settings.JWT_ALGORITHM,
-        expires_delta_minutes=60,
-    )
+    new_access = issue_access_token(user)
     new_raw = secrets.token_urlsafe(32)
     new_hash = hash_token(new_raw)
     new_expires = now + timedelta(days=30)
@@ -470,61 +440,3 @@ async def revoke_all_refresh_tokens(user_id: uuid.UUID, db: AsyncSession) -> int
     return len(tokens)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# MFA TOTP Challenge
-# ═══════════════════════════════════════════════════════════════════════════════
-
-_totp_attempts: dict[uuid.UUID, list[datetime]] = {}
-
-
-async def verify_totp_challenge(mfa_token_str: str, code: str, db: AsyncSession) -> User:
-    """
-    Verify TOTP or backup code during MFA flow.
-    mfa_token must be a valid token (scope not checked here; check in route).
-    """
-    try:
-        payload = jwt.decode(mfa_token_str, settings.JWT_PUBLIC_KEY, algorithms=[settings.JWT_ALGORITHM])
-    except jwt.ExpiredSignatureError as exc:
-        raise AuthenticationError("MFA token expired") from exc
-    except jwt.JWTError as exc:
-        raise AuthenticationError("Invalid MFA token") from exc
-
-    # Check scope (if present) — optional for now
-    # if payload.get("scope") != "mfa_pending":
-    #     raise AuthenticationError("Invalid MFA token scope")
-
-    user_id = payload.get("sub")
-    user = await db.get(User, uuid.UUID(user_id))
-    if not user or not user.is_active:
-        raise AuthenticationError("User not found")
-
-    # Rate limiting: 5 attempts per 5 min
-    now = datetime.now(timezone.utc)
-    attempts = _totp_attempts.get(user.id, [])
-    window = now - timedelta(minutes=5)
-    attempts = [t for t in attempts if t > window]
-    if len(attempts) >= 5:
-        raise HTTPException(status_code=403, detail="Too many failed MFA attempts")
-
-    # Verify
-    is_valid = False
-    if user.totp_secret:
-        secret = _pwd_context.decode(user.totp_secret)  # Wait — we stored encrypted via Fernet. Need decrypt.
-        # Actually user.totp_secret is stored encrypted via Fernet from TOTP setup. Need to decrypt.
-        secret = decrypt_data(user.totp_secret, settings.TOKEN_ENCRYPTION_KEY)
-        if verify_totp_code(secret, code):
-            is_valid = True
-
-    if not is_valid and user.backup_codes_hash:
-        if verify_backup_code(user.backup_codes_hash, code):
-            is_valid = True
-            await db.commit()
-
-    if not is_valid:
-        attempts.append(now)
-        _totp_attempts[user.id] = attempts
-        raise AuthenticationError("Invalid MFA code")
-
-    # Success
-    _totp_attempts.pop(user.id, None)
-    return user

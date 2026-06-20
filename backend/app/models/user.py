@@ -19,7 +19,7 @@ from app.models import TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.resume import Resume
-    from app.models.tracker import Application
+    from app.models.application import Application
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -73,10 +73,7 @@ class User(Base, TimestampMixin):
     )
     last_login_ip: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
 
-    # ── TOTP 2FA ─────────────────────────────────────────────────────────────────
-    totp_secret: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # ENCRYPTED
-    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    backup_codes_hash: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True)
+    # ── TOTP 2FA (Removed per instructions) ──────────────────────────────────────
 
     # ── Relationships ────────────────────────────────────────────────────────────
     settings: Mapped["UserSettings"] = relationship(

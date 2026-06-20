@@ -14,8 +14,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.limiter import limiter
-from app.routes import ai, applications, auth, dashboard, interviews, reminders, resumes, user
-
+from app.api.v1 import generation, applications, auth, dashboard, interviews, reminders, resumes, users
 API_PREFIX = "/api/v1"
 
 
@@ -56,14 +55,13 @@ app.add_middleware(
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router,         prefix=f"{API_PREFIX}/auth",         tags=["Auth"])
-app.include_router(user.router,         prefix=f"{API_PREFIX}/user",         tags=["User"])
+app.include_router(users.router,        prefix=f"{API_PREFIX}/users",        tags=["Users"])
 app.include_router(dashboard.router,    prefix=f"{API_PREFIX}/dashboard",    tags=["Dashboard"])
 app.include_router(resumes.router,      prefix=f"{API_PREFIX}/resumes",      tags=["Resumes"])
 app.include_router(applications.router, prefix=f"{API_PREFIX}/applications", tags=["Applications"])
 app.include_router(interviews.router,   prefix=f"{API_PREFIX}/interviews",   tags=["Interviews"])
 app.include_router(reminders.router,    prefix=f"{API_PREFIX}/reminders",    tags=["Reminders"])
-app.include_router(ai.router,           prefix=f"{API_PREFIX}/ai",           tags=["AI Lab"])
-
+app.include_router(generation.router,   prefix=f"{API_PREFIX}",              tags=["Generation"])
 
 # ── Health checks ─────────────────────────────────────────────────────────────
 
@@ -74,7 +72,7 @@ async def health():
         "status": "ok",
         "service": settings.APP_NAME,
         "version": "2.0.0",
-        "ai_mode": "mock" if settings.AI_MOCK_MODE else "gemini",
+        "environment": settings.ENVIRONMENT,
     }
 
 
