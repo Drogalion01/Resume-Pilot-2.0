@@ -14,6 +14,7 @@ from app.core.dependencies import CurrentUser, get_db
 from app.core.exceptions import AuthenticationError
 from app.limiter import limiter
 from app.models.user import OAuthAccount, RefreshToken, User
+from app.schemas.auth import (
     AuthResponse,
     OAuthAuthorizeRequest,
     OAuthCallbackRequest,

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CurrentUser, get_db
-from app.models.tracker import Application, ApplicationStatus, Interview, Note, Reminder, TimelineEvent
+from app.models.application import Application, ApplicationStatus, Interview, Note, Reminder, TimelineEvent
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationDetail,

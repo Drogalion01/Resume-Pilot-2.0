@@ -17,7 +17,7 @@ from app.models import TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.user import User
-    from app.models.tracker import Application
+    from app.models.application import Application
 
 
 class Resume(Base, TimestampMixin):

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CurrentUser, get_db
-from app.models.tracker import Application, Interview
+from app.models.application import Application, Interview
 from app.schemas.application import InterviewOut
 from app.schemas.interview import InterviewCreate, InterviewUpdate
 
