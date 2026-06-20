@@ -17,6 +17,8 @@ from docx import Document
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.s3_service import s3_service
+
 from app.config import settings
 from app.core.exceptions import FileUploadError, GenerationLimitExceededError, ValidationError
 from app.models.resume import AnalysisResult, Resume, ResumeVersion
@@ -183,13 +185,18 @@ async def create_resume_from_upload(
     if not raw_text or len(raw_text) < 50:
         raise ValidationError("Uploaded file appears empty or unreadable")
 
+    # Upload file to S3
+    s3_key = f"resumes/{user_id}/{uuid.uuid4()}-{filename}"
+    content_type = "application/pdf" if filename.lower().endswith('.pdf') else "application/octet-stream"
+    s3_url = await s3_service.upload_file(file_bytes, s3_key, content_type=content_type)
+
     # Create Resume record
     resume = Resume(
         id=uuid.uuid4(),
         user_id=user_id,
         title=title,
         original_filename=filename,
-        file_path=None,  # TODO: save to local FS
+        file_path=s3_url,
         file_type=filename.rsplit(".",1)[-1].lower(),
         raw_text=raw_text,
         parsed_json=None,

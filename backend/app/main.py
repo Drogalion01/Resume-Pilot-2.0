@@ -14,7 +14,17 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.limiter import limiter
-from app.api.v1 import generation, applications, auth, dashboard, interviews, reminders, resumes, users
+from app.api.v1 import (
+    applications,
+    auth,
+    dashboard,
+    generation,
+    interviews,
+    reminders,
+    resumes,
+    users,
+    paddle_webhooks,
+)
 API_PREFIX = "/api/v1"
 
 
@@ -59,9 +69,10 @@ app.include_router(users.router,        prefix=f"{API_PREFIX}/users",        tag
 app.include_router(dashboard.router,    prefix=f"{API_PREFIX}/dashboard",    tags=["Dashboard"])
 app.include_router(resumes.router,      prefix=f"{API_PREFIX}/resumes",      tags=["Resumes"])
 app.include_router(applications.router, prefix=f"{API_PREFIX}/applications", tags=["Applications"])
-app.include_router(interviews.router,   prefix=f"{API_PREFIX}/interviews",   tags=["Interviews"])
+app.include_router(interviews.router,   prefix=f"{API_PREFIX}",              tags=["Interviews"])
 app.include_router(reminders.router,    prefix=f"{API_PREFIX}/reminders",    tags=["Reminders"])
 app.include_router(generation.router,   prefix=f"{API_PREFIX}",              tags=["Generation"])
+app.include_router(paddle_webhooks.router, prefix=f"{API_PREFIX}",           tags=["Webhooks"])
 
 # ── Health checks ─────────────────────────────────────────────────────────────
 

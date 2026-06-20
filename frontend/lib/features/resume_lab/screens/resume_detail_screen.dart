@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/router/router.dart';
 import '../../../app/theme/premium_theme.dart';
@@ -21,6 +22,30 @@ class ResumeDetailScreen extends ConsumerWidget {
       backgroundColor: PremiumTheme.bgPrimary,
       appBar: AppBar(
         title: const Text('Resume Details'),
+        actions: [
+          resumeAsync.maybeWhen(
+            data: (resume) => IconButton(
+              icon: const Icon(Icons.download_rounded),
+              tooltip: 'Download Original',
+              onPressed: () async {
+                try {
+                  final url = await ref.read(resumeRepositoryProvider).getDownloadUrl(resume.id);
+                  if (await canLaunchUrl(Uri.parse(url))) {
+                    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to download: $e'), backgroundColor: PremiumTheme.error),
+                    );
+                  }
+                }
+              },
+            ),
+            orElse: () => const SizedBox.shrink(),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       floatingActionButton: resumeAsync.maybeWhen(
         data: (resume) => FloatingActionButton.extended(

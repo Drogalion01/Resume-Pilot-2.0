@@ -30,7 +30,7 @@ class UserModel {
         avatarUrl: json['avatar_url'] as String?,
         initials: json['initials'] as String?,
         emailVerified: json['email_verified'] as bool? ?? false,
-        plan: json['plan'] as String? ?? 'free',
+        plan: (json['subscription_tier'] as String?) ?? (json['plan'] as String?) ?? 'free',
         isActive: json['is_active'] as bool? ?? true,
         onboardingCompleted: json['onboarding_completed'] as bool? ?? false,
       );

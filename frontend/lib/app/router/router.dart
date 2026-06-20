@@ -19,6 +19,7 @@ import '../../features/auth/screens/magic_link_screen.dart';
 import '../../features/auth/screens/magic_link_verify_screen.dart';
 import '../../features/applications/screens/application_list_screen.dart';
 import '../../features/applications/screens/application_detail_screen.dart';
+import '../../features/interviews/screens/schedule_interview_screen.dart';
 import '../../features/resume_lab/screens/generate_screen.dart';
 import '../../features/resume_lab/screens/generation_result_screen.dart';
 import '../../features/resume_lab/screens/resume_detail_screen.dart';
@@ -48,6 +49,7 @@ class Routes {
   static const generate    = '/resume-lab/generate';
   static const generationResult = '/resume-lab/result';
   static const applicationDetail = '/applications'; // Used prefix for detail id
+  static const scheduleInterview = '/schedule-interview';
 }
 
 // ── Provider ───────────────────────────────────────────────────────────────────
@@ -136,6 +138,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) {
           final id = state.pathParameters['id']!;
           return ApplicationDetailScreen(applicationId: id);
+        },
+      ),
+
+      GoRoute(
+        path: '${Routes.scheduleInterview}/:id',
+        builder: (_, state) {
+          final appId = state.pathParameters['id']!;
+          return ScheduleInterviewScreen(applicationId: appId);
         },
       ),
 

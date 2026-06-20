@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/theme/premium_theme.dart';
+import '../../../app/router/router.dart';
 import '../../../core/models/application_model.dart';
+import '../../../shared/widgets/primary_button.dart';
 import '../providers/application_provider.dart';
 
 class ApplicationDetailScreen extends ConsumerWidget {
@@ -93,6 +95,24 @@ class ApplicationDetailScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
+            PrimaryButton(
+              label: 'Schedule Interview',
+              icon: Icons.calendar_month_outlined,
+              onTap: () => context.push('${Routes.scheduleInterview}/$applicationId'),
+            ),
+            if (app.status == ApplicationStatus.offer) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _generatePost(context, ref, app.id),
+                icon: const Icon(Icons.share_rounded),
+                label: const Text('Draft LinkedIn Announcement'),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: PremiumTheme.info),
+                  foregroundColor: PremiumTheme.info,
+                ),
+              ),
+            ],
             const SizedBox(height: 32),
 
             Text('Timeline', style: PremiumTheme.headline3(PremiumTheme.textPrimary)),
@@ -125,6 +145,47 @@ class ApplicationDetailScreen extends ConsumerWidget {
       ApplicationStatus.offer => PremiumTheme.success,
       ApplicationStatus.rejected || ApplicationStatus.withdrawn => PremiumTheme.error,
     };
+  }
+
+  Future<void> _generatePost(BuildContext context, WidgetRef ref, String appId) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: PremiumTheme.bgCard,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: PremiumTheme.info),
+            const SizedBox(height: 24),
+            Text('Drafting post with Haiku 4.5...', style: PremiumTheme.body(PremiumTheme.textSecondary)),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final post = await ref.read(applicationRepositoryProvider).generateSocialPost(appId);
+      if (context.mounted) {
+        Navigator.pop(context); // close loading dialog
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: PremiumTheme.bgCard,
+            title: Text('Your LinkedIn Post', style: PremiumTheme.headline3(PremiumTheme.textPrimary)),
+            content: SelectableText(post, style: PremiumTheme.body(PremiumTheme.textSecondary)),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: PremiumTheme.error));
+      }
+    }
   }
 }
 

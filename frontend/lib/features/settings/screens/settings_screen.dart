@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/premium_theme.dart';
 import '../../../core/auth/auth_notifier.dart';
@@ -54,6 +56,22 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: themeMode.name.capitalize(),
             onTap: () => _showThemePicker(context, ref),
           ).animate(delay: 100.ms).fadeIn(),
+
+          // Billing & Subscription
+          _SectionHeader('Billing & Subscription'),
+          _SettingsTile(
+            icon: Icons.workspace_premium_rounded,
+            title: user?.isPro == true ? 'Manage Pro Subscription' : 'Upgrade to Pro',
+            subtitle: user?.isPro == true ? 'Active until end of billing cycle' : 'Unlock unlimited AI generations',
+            iconColor: PremiumTheme.accent,
+            onTap: () async {
+              // Paddle checkout link or customer portal link
+              final url = Uri.parse('https://buy.paddle.com/checkout');
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url, mode: LaunchMode.externalApplication);
+              }
+            },
+          ).animate(delay: 125.ms).fadeIn(),
 
           const SizedBox(height: 24),
 
@@ -325,6 +343,7 @@ class _SettingsTile extends StatelessWidget {
   final String? subtitle;
   final VoidCallback? onTap;
   final Widget? trailing;
+  final Color? iconColor;
 
   const _SettingsTile({
     required this.icon,
@@ -332,6 +351,7 @@ class _SettingsTile extends StatelessWidget {
     this.subtitle,
     this.onTap,
     this.trailing,
+    this.iconColor,
   });
 
   @override
@@ -353,7 +373,7 @@ class _SettingsTile extends StatelessWidget {
                   color: PremiumTheme.primary.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: PremiumTheme.accent, size: 18),
+                child: Icon(icon, color: iconColor ?? PremiumTheme.accent, size: 18),
               ),
               const SizedBox(width: 14),
               Expanded(

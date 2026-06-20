@@ -15,6 +15,7 @@ from app.config import settings
 from app.core.dependencies import CurrentUser, get_db
 from app.models.resume import AnalysisResult, Resume, ResumeVersion
 from app.models.user import User
+from app.services.s3_service import s3_service
 from app.schemas.resume import (
     AnalysisResultOut,
     ResumeDetail,
@@ -150,9 +151,38 @@ async def delete_resume(
     resume = await db.get(Resume, resume_id)
     if not resume or resume.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Resume not found")
+        
+    if resume.file_path and resume.file_path.startswith("s3://"):
+        s3_key = resume.file_path.split(f"s3://{settings.S3_BUCKET_NAME}/")[-1]
+        await s3_service.delete_file(s3_key)
+        
     await db.delete(resume)
     await db.commit()
     return None
+
+@router.get("/{resume_id}/download")
+async def download_resume(
+    resume_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a presigned S3 URL to download the original resume PDF/DOCX"""
+    resume = await db.get(Resume, resume_id)
+    if not resume or resume.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Resume not found")
+        
+    if not resume.file_path:
+        raise HTTPException(status_code=404, detail="Original file not found")
+        
+    if resume.file_path.startswith("s3://"):
+        s3_key = resume.file_path.split(f"s3://{settings.S3_BUCKET_NAME}/")[-1]
+        url = await s3_service.generate_presigned_url(s3_key)
+        if not url:
+            raise HTTPException(status_code=500, detail="Failed to generate download link")
+        return {"download_url": url}
+    
+    # Fallback to local
+    return {"download_url": resume.file_path}
 
 
 @router.get("/{resume_id}/analysis", response_model=AnalysisResultOut)

@@ -18,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app/app.dart';
 import 'core/network/api_client.dart';
+import 'core/notifications/notification_service.dart';
 
 // Global navigator key — gives app_links access to GoRouter navigation
 // without needing a BuildContext.
@@ -41,6 +42,9 @@ void main() async {
   // Initialise Hive for offline cache
   await Hive.initFlutter();
   final cacheDir = (await getApplicationDocumentsDirectory()).path;
+
+  // Initialize notifications
+  await NotificationService().init();
 
   runApp(
     ProviderScope(

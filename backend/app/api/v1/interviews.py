@@ -72,7 +72,7 @@ async def create_interview(
     return InterviewOut.model_validate(interview)
 
 
-@router.patch("/{interview_id}", response_model=InterviewOut)
+@router.patch("/interviews/{interview_id}", response_model=InterviewOut)
 async def update_interview(
     interview_id: uuid.UUID,
     body: InterviewUpdate,
@@ -99,7 +99,7 @@ async def update_interview(
     return InterviewOut.model_validate(interview)
 
 
-@router.delete("/{interview_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/interviews/{interview_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_interview(
     interview_id: uuid.UUID,
     current_user: CurrentUser,

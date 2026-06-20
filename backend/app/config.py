@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ENVIRONMENT: str = "development"
 
+    # ── Paddle (Monetization) ───────────────────────────────────────────────────
+    PADDLE_API_KEY: str = ""
+    PADDLE_WEBHOOK_SECRET: str = ""
+
     # ── Generation limits ───────────────────────────────────────────────────────
     FREE_TIER_GENERATION_LIMIT: int = 3
     PRO_TIER_MONTHLY_LIMIT: int = 30
@@ -57,7 +61,13 @@ class Settings(BaseSettings):
     # ── File uploads ────────────────────────────────────────────────────────────
     MAX_FILE_SIZE_MB: int = 10
     ALLOWED_UPLOAD_EXTENSIONS: List[str] = ["pdf", "docx", "doc", "txt"]
-    UPLOAD_DIR: str = "uploads"
+    UPLOAD_DIR: str = "uploads" # Keeping as fallback if S3 is disabled
+
+    # ── AWS S3 (Storage) ────────────────────────────────────────────────────────
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = "us-east-1"
+    S3_BUCKET_NAME: str = ""
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

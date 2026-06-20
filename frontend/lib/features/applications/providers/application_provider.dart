@@ -50,6 +50,11 @@ class ApplicationRepository {
     final res = await _dio.get('/applications/$applicationId/timeline');
     return (res.data as List).map((e) => TimelineEvent.fromJson(e as Map<String, dynamic>)).toList();
   }
+
+  Future<String> generateSocialPost(String applicationId) async {
+    final res = await _dio.post('/applications/$applicationId/generate-post');
+    return res.data['message'] as String;
+  }
 }
 
 final applicationRepositoryProvider = Provider<ApplicationRepository>((ref) {

@@ -36,6 +36,32 @@ async def generate_tailored_resume_endpoint(
     if not resume or resume.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Resume not found")
 
+    # Check generation limits based on subscription tier
+    from app.config import settings
+    from datetime import datetime, timezone
+    
+    now = datetime.now(timezone.utc)
+    # Reset limit if billing cycle reset
+    if current_user.generation_reset_date and now > current_user.generation_reset_date:
+        current_user.generation_count_this_month = 0
+        # Reset to next month approx
+        import dateutil.relativedelta
+        current_user.generation_reset_date = now + dateutil.relativedelta.relativedelta(months=1)
+        await db.commit()
+
+    if current_user.subscription_tier == "free":
+        if current_user.generation_count_this_month >= settings.FREE_TIER_GENERATION_LIMIT:
+            raise HTTPException(
+                status_code=402, 
+                detail="Free tier limit reached. Please upgrade to Pro for unlimited generations."
+            )
+    elif current_user.subscription_tier == "pro":
+        if current_user.generation_count_this_month >= settings.PRO_TIER_MONTHLY_LIMIT:
+            raise HTTPException(
+                status_code=402, 
+                detail="Pro tier monthly limit reached."
+            )
+
     try:
         tailored_resume, cover_letter_text = await llm_service.generate_resume_and_cover_letter(
             master_resume_json=resume.parsed_data or {},
@@ -78,6 +104,10 @@ async def generate_tailored_resume_endpoint(
         db.add(cl)
         await db.flush()
         cover_letter_id = cl.id
+
+    # Increment generation count
+    current_user.generation_count_this_month += 1
+    db.add(current_user)
 
     await db.commit()
     await db.refresh(new_version)
@@ -172,3 +202,25 @@ async def delete_cover_letter(
     await db.delete(cl)
     await db.commit()
     return MessageResponse(message="Cover letter deleted")
+
+@router.post("/applications/{app_id}/generate-post", response_model=MessageResponse)
+async def generate_social_post(
+    app_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.application import Application
+    app = await db.get(Application, app_id)
+    if not app or app.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Application not found")
+    
+    try:
+        post_text = await llm_service.generate_linkedin_post(
+            job_title=app.role,
+            company_name=app.company_name,
+            user_name=current_user.full_name,
+        )
+    except llm_service.LLMServiceError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    
+    return MessageResponse(message=post_text)

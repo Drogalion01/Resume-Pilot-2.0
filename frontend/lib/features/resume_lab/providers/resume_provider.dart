@@ -41,6 +41,11 @@ class ResumeRepository {
 
   Future<void> deleteResume(String id) => _dio.delete('/resumes/$id');
 
+  Future<String> getDownloadUrl(String id) async {
+    final res = await _dio.get('/resumes/$id/download');
+    return res.data['download_url'] as String;
+  }
+
   Future<List<ResumeVersion>> fetchVersions(String resumeId) async {
     final res = await _dio.get('/resumes/$resumeId/versions');
     return (res.data as List)

@@ -129,6 +129,32 @@ async def generate_resume_and_cover_letter(
         resume = await resume_task
         return resume, None
 
+async def generate_linkedin_post(
+    job_title: str,
+    company_name: str,
+    user_name: Optional[str] = None,
+) -> str:
+    if not client:
+        return f"I'm incredibly excited to announce that I've joined {company_name} as a {job_title}! 🎉 I can't wait to start this new journey and work with such an amazing team."
+
+    system_prompt = "You are a professional yet enthusiastic career coach. Write a single engaging LinkedIn post (max 150 words) announcing a new job. Use emojis appropriately but keep it professional. Do NOT include hashtags. Respond with the text of the post only."
+    prompt = f"Candidate name: {user_name or 'I'}. Job title: {job_title}. Company: {company_name}."
+
+    try:
+        response = await client.messages.create(
+            model=MODEL_NAME,
+            max_tokens=250,
+            temperature=0.8,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        return response.content[0].text
+    except Exception as exc:
+        logger.exception("Anthropic linkedin post generation failed")
+        raise LLMServiceError("Failed to generate LinkedIn post")
+
 def _mock_tailored_resume() -> dict:
     return {
         "personal_info": {
