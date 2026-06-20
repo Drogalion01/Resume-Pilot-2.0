@@ -97,6 +97,11 @@ class NotificationService {
 
   Future<void> cancelReminder(int id) async {
     if (kIsWeb) return;
-    await _flutterLocalNotificationsPlugin.cancel(id);
+    dynamic plugin = _flutterLocalNotificationsPlugin;
+    try {
+      await plugin.cancel(id);
+    } catch (e) {
+      // Ignore
+    }
   }
 }
