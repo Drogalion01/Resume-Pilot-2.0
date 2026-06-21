@@ -78,6 +78,14 @@ app.include_router(subscriptions.router, prefix=f"{API_PREFIX}/subscriptions", t
 
 # ── Health checks ─────────────────────────────────────────────────────────────
 
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "message": "ResumePilot 2.0 Backend API is running!",
+        "docs": f"{API_PREFIX}/docs",
+        "health": f"{API_PREFIX}/health"
+    }
+
 @app.get(f"{API_PREFIX}/health", tags=["Health"])
 @app.head(f"{API_PREFIX}/health", tags=["Health"])
 async def health():
