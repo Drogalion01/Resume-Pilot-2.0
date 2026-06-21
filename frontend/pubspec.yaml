@@ -27,7 +27,6 @@ dependencies:
   app_links: ^6.3.2
   flutter_web_auth_2: ^4.0.0
 
-
   # ── Local Storage ──────────────────────────────────────────────────────────
   shared_preferences: ^2.3.3
   hive: ^2.2.3
@@ -66,6 +65,22 @@ dev_dependencies:
   riverpod_generator: ^2.4.4
   custom_lint: ^0.7.0
   riverpod_lint: ^2.3.13
+  flutter_launcher_icons: "^0.14.4"
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false
+  image_path: "assets/icon/Logo.png"
+  min_sdk_android: 21 # android min sdk min:16, default 21
+  web:
+    generate: true
+    image_path: "assets/icon/Logo.png"
+    background_color: "transparent"
+    theme_color: "transparent"
+  windows:
+    generate: false
+  macos:
+    generate: false
