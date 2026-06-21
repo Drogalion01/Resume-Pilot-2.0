@@ -3,6 +3,7 @@ app/routes/auth.py — Passwordless authentication
 """
 import logging
 import uuid
+from jose import jwt
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status

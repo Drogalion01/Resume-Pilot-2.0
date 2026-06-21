@@ -26,12 +26,13 @@ class ResumeRepository {
   }
 
   Future<Resume> uploadResume({
-    required String filePath,
+    required List<int> fileBytes,
+    required String fileName,
     required String title,
     required bool isMaster,
   }) async {
     final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(filePath),
+      'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
       'title': title,
       'is_master': isMaster.toString(),
     });

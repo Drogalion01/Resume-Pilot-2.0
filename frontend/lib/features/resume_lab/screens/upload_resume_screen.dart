@@ -40,6 +40,7 @@ class _UploadResumeScreenState extends ConsumerState<UploadResumeScreen> {
       type: FileType.custom,
       allowedExtensions: ['pdf', 'docx'],
       allowMultiple: false,
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
@@ -69,8 +70,8 @@ class _UploadResumeScreenState extends ConsumerState<UploadResumeScreen> {
       setState(() => _error = 'Please select a file first');
       return;
     }
-    if (_pickedFile!.path == null) {
-      setState(() => _error = 'File path unavailable — try picking again');
+    if (_pickedFile!.bytes == null) {
+      setState(() => _error = 'File data unavailable — try picking again');
       return;
     }
 
@@ -78,7 +79,8 @@ class _UploadResumeScreenState extends ConsumerState<UploadResumeScreen> {
 
     try {
       final resume = await ref.read(resumeRepositoryProvider).uploadResume(
-            filePath: _pickedFile!.path!,
+            fileBytes: _pickedFile!.bytes!,
+            fileName: _pickedFile!.name,
             title: _titleCtrl.text.trim(),
             isMaster: _isMaster,
           );
