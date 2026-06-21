@@ -34,10 +34,6 @@ from app.services.resume_service import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Where to store uploaded files locally (Render ephemeral disk)
-UPLOAD_BASE_DIR = Path(settings.UPLOAD_DIR)
-UPLOAD_BASE_DIR.mkdir(parents=True, exist_ok=True)
-
 
 @router.get("/", response_model=list[ResumeListItem])
 async def list_resumes(
