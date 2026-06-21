@@ -49,14 +49,18 @@ async def generate_tailored_resume_endpoint(
         current_user.generation_reset_date = now + dateutil.relativedelta.relativedelta(months=1)
         await db.commit()
 
+    # We use 3 for free tier as requested
+    free_limit = 3
+    pro_limit = settings.PRO_TIER_MONTHLY_LIMIT
+
     if current_user.subscription_tier == "free":
-        if current_user.generation_count_this_month >= settings.FREE_TIER_GENERATION_LIMIT:
+        if current_user.generation_count_this_month >= free_limit:
             raise HTTPException(
                 status_code=402, 
-                detail="Free tier limit reached. Please upgrade to Pro for unlimited generations."
+                detail=f"Free tier limit of {free_limit} resume tailors reached. Please upgrade to Pro for unlimited generations."
             )
     elif current_user.subscription_tier == "pro":
-        if current_user.generation_count_this_month >= settings.PRO_TIER_MONTHLY_LIMIT:
+        if current_user.generation_count_this_month >= pro_limit:
             raise HTTPException(
                 status_code=402, 
                 detail="Pro tier monthly limit reached."
@@ -138,6 +142,26 @@ async def create_cover_letter(
             raise HTTPException(status_code=404, detail="Resume version not found")
         resume_data = version.content_json or {}
 
+    # Check cover letter limits
+    from datetime import datetime, timezone
+    import dateutil.relativedelta
+
+    now = datetime.now(timezone.utc)
+    if current_user.generation_reset_date and now > current_user.generation_reset_date:
+        current_user.cover_letter_count_this_month = 0
+        current_user.generation_count_this_month = 0
+        current_user.generation_reset_date = now + dateutil.relativedelta.relativedelta(months=1)
+        await db.commit()
+
+    free_cl_limit = 3
+    if current_user.subscription_tier == "free":
+        if current_user.cover_letter_count_this_month >= free_cl_limit:
+            raise HTTPException(status_code=402, detail="Free tier limit of 3 cover letters reached. Please upgrade to Pro.")
+    elif current_user.subscription_tier == "pro":
+        from app.config import settings
+        if current_user.cover_letter_count_this_month >= settings.PRO_TIER_MONTHLY_LIMIT:
+            raise HTTPException(status_code=402, detail="Pro tier monthly cover letter limit reached.")
+
     try:
         cover_letter_text = await llm_service.generate_cover_letter(
             resume_version_json=resume_data,
@@ -158,6 +182,10 @@ async def create_cover_letter(
         generation_metadata={"source": "manual request"},
     )
     db.add(cl)
+    
+    current_user.cover_letter_count_this_month += 1
+    db.add(current_user)
+
     await db.commit()
     await db.refresh(cl)
     return cl

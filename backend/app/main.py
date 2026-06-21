@@ -24,6 +24,7 @@ from app.api.v1 import (
     resumes,
     users,
     paddle_webhooks,
+    subscriptions,
 )
 API_PREFIX = "/api/v1"
 
@@ -73,6 +74,7 @@ app.include_router(interviews.router,   prefix=f"{API_PREFIX}",              tag
 app.include_router(reminders.router,    prefix=f"{API_PREFIX}/reminders",    tags=["Reminders"])
 app.include_router(generation.router,   prefix=f"{API_PREFIX}",              tags=["Generation"])
 app.include_router(paddle_webhooks.router, prefix=f"{API_PREFIX}",           tags=["Webhooks"])
+app.include_router(subscriptions.router, prefix=f"{API_PREFIX}/subscriptions", tags=["Subscriptions"])
 
 # ── Health checks ─────────────────────────────────────────────────────────────
 

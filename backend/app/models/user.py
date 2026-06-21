@@ -63,6 +63,9 @@ class User(Base, TimestampMixin):
     generation_count_this_month: Mapped[int] = mapped_column(
         default=0, nullable=False
     )
+    cover_letter_count_this_month: Mapped[int] = mapped_column(
+        default=0, nullable=False
+    )
     generation_reset_date: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
