@@ -12,6 +12,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
@@ -104,10 +105,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = const AuthStateLoading();
     try {
       // 1. Get the authorization URL from backend
+      final String redirectUri = kIsWeb
+          ? '${Uri.base.origin}/auth.html'
+          : '${AppConstants.deepLinkBase}/auth/callback/$provider';
+
       final res = await _client.dio.get(
         '/auth/oauth/$provider/authorize',
         queryParameters: {
-          'redirect_uri': '${AppConstants.deepLinkBase}/auth/callback/$provider',
+          'redirect_uri': redirectUri,
         },
       );
       final data = res.data as Map<String, dynamic>;
@@ -140,7 +145,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         data: {
           'code': code,
           'state': returnedState,
-          'redirect_uri': '${AppConstants.deepLinkBase}/auth/callback/$provider',
+          'redirect_uri': redirectUri,
         },
       );
       _handleAuthResponse(callbackRes.data as Map<String, dynamic>);
