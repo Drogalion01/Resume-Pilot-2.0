@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.exceptions import AuthenticationError
 from app.core.security import create_access_token, decrypt_data, encrypt_data, hash_token
-from app.models.user import OAuthAccount, RefreshToken, User
+from app.models.user import OAuthAccount, RefreshToken, User, MagicLinkToken, UserSettings
 
 logger = logging.getLogger(__name__)
 
