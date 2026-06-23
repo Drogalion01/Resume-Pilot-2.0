@@ -49,7 +49,10 @@ class Resume(Base, TimestampMixin):
     # ── Relationships ────────────────────────────────────────────────────────────
     user: Mapped["User"] = relationship("User", back_populates="resumes")
     versions: Mapped[list["ResumeVersion"]] = relationship(
-        "ResumeVersion", back_populates="resume", cascade="all, delete-orphan"
+        "ResumeVersion",
+        back_populates="resume",
+        foreign_keys="[ResumeVersion.resume_id]",
+        cascade="all, delete-orphan"
     )
     analysis_results: Mapped[list["AnalysisResult"]] = relationship(
         "AnalysisResult",
@@ -95,7 +98,11 @@ class ResumeVersion(Base, TimestampMixin):
     generation_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     # ── Relationships ────────────────────────────────────────────────────────────
-    resume: Mapped["Resume"] = relationship("Resume", back_populates="versions")
+    resume: Mapped["Resume"] = relationship(
+        "Resume",
+        back_populates="versions",
+        foreign_keys=[resume_id]
+    )
     analysis_results: Mapped[list["AnalysisResult"]] = relationship(
         "AnalysisResult",
         back_populates="resume_version",
