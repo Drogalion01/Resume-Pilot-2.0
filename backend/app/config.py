@@ -75,9 +75,14 @@ class Settings(BaseSettings):
     def normalise_db_url(cls, v: str) -> str:
         """Accept both postgres:// and postgresql:// (Neon/Heroku/Render style)."""
         if v.startswith("postgres://"):
-            return v.replace("postgres://", "postgresql+asyncpg://", 1)
+            v = v.replace("postgres://", "postgresql+asyncpg://", 1)
         if v.startswith("postgresql://") and "+asyncpg" not in v:
-            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        
+        # asyncpg does not accept sslmode=require, it uses ssl=require
+        if "sslmode=" in v:
+            v = v.replace("sslmode=", "ssl=")
+            
         return v
 
 
