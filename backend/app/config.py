@@ -83,6 +83,12 @@ class Settings(BaseSettings):
         if "sslmode=" in v:
             v = v.replace("sslmode=", "ssl=")
             
+        # asyncpg does not accept channel_binding
+        if "&channel_binding=require" in v:
+            v = v.replace("&channel_binding=require", "")
+        elif "?channel_binding=require" in v:
+            v = v.replace("?channel_binding=require", "")
+            
         return v
 
 
