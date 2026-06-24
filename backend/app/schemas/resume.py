@@ -74,7 +74,6 @@ class ResumeVersionOut(BaseModel):
 
 class AnalysisResultOut(BaseModel):
     id: uuid.UUID
-    status: str  # processing | completed | failed
     ats_score: Optional[int] = None
     recruiter_score: Optional[int] = None
     overall_score: Optional[int] = None
@@ -84,6 +83,7 @@ class AnalysisResultOut(BaseModel):
     matched_keywords: Optional[list] = None
     suggestions: Optional[list] = None
     job_title: Optional[str] = None
+    reference_comparisons: Optional[list] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

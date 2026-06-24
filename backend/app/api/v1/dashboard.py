@@ -22,8 +22,8 @@ async def get_dashboard(
     interviews_count = await db.scalar(select(func.count(Interview.id)).where(Interview.user_id == current_user.id))
 
     # Fetch upcoming interviews
-    from datetime import datetime
-    now = datetime.utcnow()
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
     upcoming_interviews_query = await db.execute(
         select(Interview)
         .options(selectinload(Interview.application))

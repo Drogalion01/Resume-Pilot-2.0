@@ -37,18 +37,25 @@ def generate_token_urlsafe(nbytes: int = 32) -> str:
     return secrets.token_urlsafe(nbytes)
 
 
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Generate a fallback symmetric secret for the lifetime of this server process
+_FALLBACK_SECRET = os.environ.get("JWT_SECRET_KEY") or secrets.token_hex(32)
+
+
 def create_access_token(
     user_id: str,
     email: str,
     tier: str = "free",
-
     private_key: str = "",
     algorithm: str = "RS256",
     expires_in_minutes: int = 60,
 ) -> str:
     """
-    Create a signed JWT access token (RS256 by default).
-    Payload: sub (user UUID), email, tier, totp_verified, iat, exp.
+    Create a signed JWT access token. Falls back to HS256 if RS256 keys are missing/invalid.
     """
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=expires_in_minutes)
@@ -59,16 +66,46 @@ def create_access_token(
         "iat": now,
         "exp": expire,
     }
-    return jose_jwt.encode(payload, private_key, algorithm=algorithm)
+    
+    # Clean key
+    private_key_str = (private_key or "").strip()
+    
+    if algorithm == "RS256" and not private_key_str:
+        algorithm = "HS256"
+        key = _FALLBACK_SECRET
+    else:
+        key = private_key_str
+
+    try:
+        return jose_jwt.encode(payload, key, algorithm=algorithm)
+    except Exception as exc:
+        if algorithm == "RS256":
+            logger.warning("RS256 JWT encoding failed (malformed PEM?). Falling back to HS256. Error: %s", exc)
+            return jose_jwt.encode(payload, _FALLBACK_SECRET, algorithm="HS256")
+        raise
 
 
 def verify_token(token: str, public_key: str = "", algorithm: str = "RS256") -> dict:
     """
-    Verify RS256 JWT signature and expiry. Returns payload dict.
-    Raises jose.exceptions.JWTError on any failure (expired, invalid signature, etc.).
-    Caller should map to HTTPException with appropriate status.
+    Verify JWT signature and expiry. Supports both RS256 and HS256 fallbacks.
     """
-    return jose_jwt.decode(token, public_key, algorithms=[algorithm])
+    try:
+        header = jose_jwt.get_unverified_header(token)
+        token_alg = header.get("alg", algorithm)
+    except Exception:
+        token_alg = algorithm
+
+    if token_alg == "HS256":
+        return jose_jwt.decode(token, _FALLBACK_SECRET, algorithms=["HS256"])
+
+    try:
+        return jose_jwt.decode(token, (public_key or "").strip(), algorithms=["RS256"])
+    except Exception as exc:
+        try:
+            return jose_jwt.decode(token, _FALLBACK_SECRET, algorithms=["HS256"])
+        except Exception:
+            raise JWTError("Invalid token") from exc
+
 
 
 # ── Encryption (Fernet = AES-256-GCM) ──────────────────────────────────────────

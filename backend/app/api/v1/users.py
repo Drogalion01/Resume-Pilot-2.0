@@ -88,12 +88,12 @@ async def get_sessions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from datetime import datetime
+    from datetime import datetime, timezone
     result = await db.execute(
         select(RefreshToken)
         .where(RefreshToken.user_id == current_user.id)
         .where(RefreshToken.revoked_at.is_(None))
-        .where(RefreshToken.expires_at > datetime.utcnow())
+        .where(RefreshToken.expires_at > datetime.now(timezone.utc))
         .order_by(RefreshToken.created_at.desc())
     )
     tokens = result.scalars().all()
@@ -116,7 +116,7 @@ async def revoke_session(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from datetime import datetime
+    from datetime import datetime, timezone
     import uuid
     try:
         fid = uuid.UUID(family_id)
@@ -134,7 +134,7 @@ async def revoke_session(
         raise HTTPException(status_code=404, detail="Session not found")
         
     for t in tokens:
-        t.revoked_at = datetime.utcnow()
+        t.revoked_at = datetime.now(timezone.utc)
         
     await db.commit()
     return {"status": "revoked"}

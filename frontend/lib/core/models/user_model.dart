@@ -29,7 +29,7 @@ class UserModel {
         fullName: json['full_name'] as String?,
         avatarUrl: json['avatar_url'] as String?,
         initials: json['initials'] as String?,
-        emailVerified: json['email_verified'] as bool? ?? false,
+        emailVerified: (json['is_email_verified'] as bool?) ?? (json['email_verified'] as bool?) ?? false,
         plan: (json['subscription_tier'] as String?) ?? (json['plan'] as String?) ?? 'free',
         isActive: json['is_active'] as bool? ?? true,
         onboardingCompleted: json['onboarding_completed'] as bool? ?? false,

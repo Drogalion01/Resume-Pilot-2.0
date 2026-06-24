@@ -19,7 +19,7 @@ from app.schemas.application import (
     NoteCreate,
     NoteOut,
 )
-from app.services.resume_service import parse_resume_text  # optional: auto-parsing JD from text?
+
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

@@ -210,7 +210,6 @@ async def create_resume_from_upload(
         id=uuid.uuid4(),
         resume_id=resume.id,
         user_id=user_id,
-        status="processing",
     )
     db.add(analysis)
     await db.commit()
@@ -218,7 +217,15 @@ async def create_resume_from_upload(
     # Trigger background analysis (or do inline for small files)
     # For now, run inline (FastAPI BackgroundTasks recommended)
     analysis_result = analyze_resume(raw_text)
-    analysis.status = "completed"
+    
+    # Retrieve similar benchmarks using RAG
+    from app.services.rag_service import rag_service
+    benchmarks = await rag_service.retrieve_similar_benchmarks(
+        resume_text=raw_text,
+        db=db,
+        limit=5
+    )
+
     analysis.ats_score = analysis_result["ats_score"]
     analysis.recruiter_score = analysis_result["recruiter_score"]
     analysis.overall_score = analysis_result["overall_score"]
@@ -227,6 +234,7 @@ async def create_resume_from_upload(
     analysis.missing_keywords = analysis_result["missing_keywords"]
     analysis.suggestions = analysis_result["suggestions"]
     analysis.matched_keywords = analysis_result.get("matched_keywords", [])
+    analysis.reference_comparisons = benchmarks
     await db.commit()
 
     return resume, raw_text

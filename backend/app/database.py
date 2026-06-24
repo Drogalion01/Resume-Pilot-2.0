@@ -20,11 +20,11 @@ def _build_engine_kwargs() -> dict:
             "connect_args": {"check_same_thread": False},
             "poolclass": StaticPool,
         }
-    # PostgreSQL (asyncpg / Neon)
+    # PostgreSQL (asyncpg / Neon) — use NullPool for serverless (Vercel)
+    from sqlalchemy.pool import NullPool
     return {
         "pool_pre_ping": True,
-        "pool_size": 5,
-        "max_overflow": 10,
+        "poolclass": NullPool,
     }
 
 

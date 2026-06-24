@@ -111,10 +111,20 @@ async def send_magic_link(email: str, ip_address: str, db: AsyncSession) -> None
     db.add(magic_token)
     await db.commit()
 
-    # Send email (in dev, just log)
+    # Send email
     verify_url = f"{settings.APP_WEB_BASE_URL}/auth/verify?token={raw_token}"
     logger.info("[MAGIC LINK] To: %s → %s", email, verify_url)
-    # Uncomment in production: background_tasks.add_task(email_service.send_magic_link, email, raw_token)
+    if settings.RESEND_API_KEY:
+        from app.services import email_service
+        import anyio
+        try:
+            success = await anyio.to_thread.run_sync(email_service.send_magic_link, email, raw_token)
+            if success:
+                logger.info("Successfully sent magic link email to %s", email)
+            else:
+                logger.error("Failed to send magic link email to %s (Resend API returned False)", email)
+        except Exception as exc:
+            logger.error("Failed to send magic link email to %s: %s", email, exc)
 
 
 async def verify_magic_link(raw_token: str, db: AsyncSession) -> User:
@@ -398,7 +408,7 @@ async def rotate_refresh_token(raw_token: str, ip: str, db: AsyncSession) -> Tup
     if not user:
         raise AuthenticationError("User not found")
 
-    new_access = issue_access_token(user)
+    new_access = await issue_access_token(user)
     new_raw = secrets.token_urlsafe(32)
     new_hash = hash_token(new_raw)
     new_expires = now + timedelta(days=30)

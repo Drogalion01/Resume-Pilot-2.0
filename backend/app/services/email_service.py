@@ -17,12 +17,21 @@ resend.api_key = settings.RESEND_API_KEY
 
 
 def _send(params: dict) -> bool:
-    """Internal send helper — runs synchronously (called from BackgroundTasks)."""
+    """Internal send helper — runs synchronously."""
     try:
         resend.Emails.send(params)
         return True
     except Exception as exc:
         logger.error("Email send failed: %s | to=%s", exc, params.get("to"))
+        # Fallback to onboarding@resend.dev if using default domain which might be unverified
+        if params.get("from") != "onboarding@resend.dev":
+            logger.info("Retrying email send with fallback sender: onboarding@resend.dev")
+            params["from"] = "onboarding@resend.dev"
+            try:
+                resend.Emails.send(params)
+                return True
+            except Exception as exc2:
+                logger.error("Email send failed with fallback sender: %s", exc2)
         return False
 
 

@@ -66,11 +66,6 @@ class Application(Base, TimestampMixin):
         ForeignKey("cover_letters.id", ondelete="SET NULL"),
         nullable=True,
     )
-    cover_letter_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("cover_letters.id", ondelete="SET NULL"),
-        nullable=True,
-    )
 
     # ── Core ─────────────────────────────────────────────────────────────────────
     company_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -111,6 +106,10 @@ class Application(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="TimelineEvent.created_at.desc()",
     )
+
+    @property
+    def latest_activity_at(self):
+        return self.updated_at or self.created_at
 
 
 class Interview(Base, TimestampMixin):

@@ -33,7 +33,7 @@ class UserProfileOut(BaseModel):
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
     initials: Optional[str] = None
-    email_verified: bool
+    is_email_verified: bool = False
     subscription_tier: str          # "free" | "pro" | "premium"
     onboarding_completed: bool
     settings: Optional[UserSettingsOut] = None

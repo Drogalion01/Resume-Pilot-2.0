@@ -51,9 +51,9 @@ class UserOut(BaseModel):
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
     initials: Optional[str] = None
-    email_verified: bool
-    subscription_tier: str = Field(..., alias="tier")  # "free" | "pro" | "premium"
-    onboarding_completed: bool
+    is_email_verified: bool = False
+    subscription_tier: str = "free"
+    onboarding_completed: bool = False
 
 
 class AuthResponse(BaseModel):
@@ -61,7 +61,7 @@ class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     refresh_token: str
-    user: UserOut
+    user: "UserProfileOut"  # forward ref, imported at module bottom
 
 
 
@@ -83,3 +83,8 @@ class SessionInfo(BaseModel):
     is_revoked: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# Resolve forward reference for AuthResponse.user
+from app.schemas.user import UserProfileOut  # noqa: E402
+AuthResponse.model_rebuild()

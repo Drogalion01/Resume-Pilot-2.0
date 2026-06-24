@@ -66,14 +66,35 @@ async def generate_tailored_resume_endpoint(
                 detail="Pro tier monthly limit reached."
             )
 
+    # Retrieve RAG context (past resumes and cover letters)
+    from app.services.rag_service import rag_service
+    relevant_resumes = await rag_service.retrieve_relevant_resumes(
+        user_id=current_user.id,
+        job_title=body.job_title,
+        job_description=body.job_description,
+        db=db,
+        limit=2,
+    )
+    relevant_cover_letters = []
+    if body.generate_cover_letter:
+        relevant_cover_letters = await rag_service.retrieve_relevant_cover_letters(
+            user_id=current_user.id,
+            job_title=body.job_title,
+            job_description=body.job_description,
+            db=db,
+            limit=2,
+        )
+
     try:
         tailored_resume, cover_letter_text = await llm_service.generate_resume_and_cover_letter(
-            master_resume_json=resume.parsed_data or {},
+            master_resume_json=resume.parsed_json or {},
             job_title=body.job_title,
             job_description=body.job_description,
             company_name=body.company_name,
             user_name=current_user.full_name,
             generate_cl=body.generate_cover_letter,
+            relevant_resumes=relevant_resumes,
+            relevant_cover_letters=relevant_cover_letters,
         )
     except llm_service.LLMServiceError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -162,6 +183,16 @@ async def create_cover_letter(
         if current_user.cover_letter_count_this_month >= settings.PRO_TIER_MONTHLY_LIMIT:
             raise HTTPException(status_code=402, detail="Pro tier monthly cover letter limit reached.")
 
+    # Retrieve RAG context (past cover letters)
+    from app.services.rag_service import rag_service
+    relevant_cover_letters = await rag_service.retrieve_relevant_cover_letters(
+        user_id=current_user.id,
+        job_title=body.job_title,
+        job_description=body.job_description or "",
+        db=db,
+        limit=3,
+    )
+
     try:
         cover_letter_text = await llm_service.generate_cover_letter(
             resume_version_json=resume_data,
@@ -169,6 +200,7 @@ async def create_cover_letter(
             company_name=body.company_name or "",
             job_description=body.job_description,
             user_name=current_user.full_name,
+            relevant_cover_letters=relevant_cover_letters,
         )
     except llm_service.LLMServiceError as exc:
         raise HTTPException(status_code=500, detail=str(exc))

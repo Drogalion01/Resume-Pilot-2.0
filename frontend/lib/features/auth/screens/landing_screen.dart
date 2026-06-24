@@ -86,7 +86,15 @@ class LandingScreen extends ConsumerWidget {
                         .fadeIn()
                         .slideX(begin: -0.05)),
 
-                const SizedBox(height: 48),
+                const SizedBox(height: 24),
+
+                Text(
+                  'First time here? Continuing will automatically create a new account.',
+                  textAlign: TextAlign.center,
+                  style: PremiumTheme.bodySmall(PremiumTheme.textSecondary),
+                ).animate(delay: 850.ms).fadeIn(),
+
+                const SizedBox(height: 24),
 
                 // ── Terms ──────────────────────────────────────────────────
                 Text(

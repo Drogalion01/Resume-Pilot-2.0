@@ -21,7 +21,7 @@ from app.schemas.auth import (
     OAuthCallbackRequest,
     RefreshTokenRequest,
 )
-from app.schemas.user import CompleteOnboardingRequest, MeResponse
+from app.schemas.user import CompleteOnboardingRequest, MeResponse, UserProfileOut
 from app.services import auth_service, email_service
 
 router = APIRouter()
@@ -60,7 +60,7 @@ async def magic_link_verify(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        user, mfa_required = await auth_service.verify_magic_link(token, db)
+        user = await auth_service.verify_magic_link(token, db)
     except Exception as exc:
         logger.warning("Magic link verify failed: %s", exc)
         raise HTTPException(status_code=401, detail=str(exc))
@@ -70,7 +70,7 @@ async def magic_link_verify(
     return AuthResponse(
         access_token=access,
         refresh_token=refresh,
-        user=MeResponse.user.model_validate(user),
+        user=UserProfileOut.model_validate(user),
     )
 
 
@@ -142,7 +142,7 @@ async def oauth_callback(
     return AuthResponse(
         access_token=access,
         refresh_token=refresh,
-        user=MeResponse.user.model_validate(user),
+        user=UserProfileOut.model_validate(user),
     )
 
 
@@ -172,7 +172,7 @@ async def refresh_token(
         return AuthResponse(
             access_token=new_access,
             refresh_token=new_refresh,
-            user=MeResponse.user.model_validate(user),
+            user=UserProfileOut.model_validate(user),
         )
     except HTTPException:
         raise
@@ -209,7 +209,7 @@ async def revoke_all_tokens(
 
 @router.get("/me", response_model=MeResponse)
 async def get_me(current_user: CurrentUser):
-    return MeResponse(user=MeResponse.user.model_validate(current_user))
+    return MeResponse(user=UserProfileOut.model_validate(current_user))
 
 
 @router.post("/onboarding", response_model=AuthResponse)
@@ -231,5 +231,5 @@ async def complete_onboarding(
     return AuthResponse(
         access_token=access,
         refresh_token=refresh,
-        user=MeResponse.user.model_validate(current_user),
+        user=UserProfileOut.model_validate(current_user),
     )

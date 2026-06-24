@@ -96,7 +96,7 @@ class WelcomeScreen extends StatelessWidget {
                   // CTAs
                   _GradientButton(
                     label: 'Get Started — It\'s Free',
-                    onTap: () => context.go(Routes.register),
+                    onTap: () => context.go(Routes.landing),
                   ).animate(delay: 800.ms).fadeIn().slideY(begin: 0.3),
 
                   const SizedBox(height: 14),
@@ -111,7 +111,7 @@ class WelcomeScreen extends StatelessWidget {
                           style: PremiumTheme.body(PremiumTheme.darkTextSecondary),
                         ),
                         GestureDetector(
-                          onTap: () => context.go(Routes.login),
+                          onTap: () => context.go(Routes.landing),
                           child: Text(
                             'Sign In',
                             style: PremiumTheme.body(PremiumTheme.accent).copyWith(

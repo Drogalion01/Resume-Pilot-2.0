@@ -150,6 +150,7 @@ class AnalysisResult(Base, TimestampMixin):
     suggestions: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     matched_keywords: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     missing_keywords: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    reference_comparisons: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
 
     # ── Job context (if this analysis was for a specific job) ────────────────────
     job_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

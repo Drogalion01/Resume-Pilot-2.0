@@ -25,16 +25,24 @@ async def generate_tailored_resume(
     job_title: str,
     job_description: str,
     company_name: Optional[str] = None,
+    relevant_resumes: Optional[list] = None,
 ) -> dict:
     if not client:
         return _mock_tailored_resume()
 
     system_instruction = "You are an expert resume writer and ATS specialist. Respond ONLY with valid JSON matching the provided schema. No markdown, no explanations. Your task is to produce a TAILORED version of this master resume optimized specifically for the given role and score it."
 
+    rag_context = ""
+    if relevant_resumes:
+        rag_context += "\nRELEVANT PAST RESUMES FOR CANDIDATE (as reference for style and wording):\n"
+        for i, rv in enumerate(relevant_resumes, 1):
+            rag_context += f"--- Resume {i} (for {rv['job_title']} at {rv['company_name'] or 'Company'}) ---\n"
+            rag_context += f"{json.dumps(rv['content'])}\n"
+
     user_prompt = f"""
 MASTER RESUME (JSON):
 {json.dumps(master_resume_json)}
-
+{rag_context}
 JOB TITLE: {job_title}
 COMPANY: {company_name or "Company"}
 JOB DESCRIPTION:
@@ -66,6 +74,7 @@ async def generate_cover_letter(
     company_name: str,
     job_description: Optional[str] = None,
     user_name: Optional[str] = None,
+    relevant_cover_letters: Optional[list] = None,
 ) -> str:
     if not client:
         return _mock_cover_letter(job_title, company_name, user_name)
@@ -77,10 +86,17 @@ async def generate_cover_letter(
         f"{e.get('title')} at {e.get('company')}" for e in resume_version_json.get("experience", [])[:3]
     ])
 
+    rag_context = ""
+    if relevant_cover_letters:
+        rag_context += "\nRELEVANT PAST GENERATED COVER LETTERS (reference for candidate's writing style/tone):\n"
+        for i, cl in enumerate(relevant_cover_letters, 1):
+            rag_context += f"--- Cover Letter {i} (for {cl['job_title']} at {cl['company_name'] or 'Company'}) ---\n"
+            rag_context += f"{cl['content']}\n"
+
     prompt = f"""
 CANDIDATE SUMMARY: {summary}
 RELEVANT EXPERIENCE: {experience}
-
+{rag_context}
 JOB TITLE: {job_title}
 COMPANY: {company_name}
 JOB DESCRIPTION:
@@ -106,12 +122,13 @@ async def generate_resume_and_cover_letter(
     job_description: str,
     company_name: Optional[str] = None,
     user_name: Optional[str] = None,
-    generate_cl: bool = True
+    generate_cl: bool = True,
+    relevant_resumes: Optional[list] = None,
+    relevant_cover_letters: Optional[list] = None,
 ) -> Tuple[dict, Optional[str]]:
-    resume_task = generate_tailored_resume(master_resume_json, job_title, job_description, company_name)
+    resume_task = generate_tailored_resume(master_resume_json, job_title, job_description, company_name, relevant_resumes=relevant_resumes)
     if generate_cl:
-        # For simplicity, we pass the master resume to generate the cover letter initially, since they run in parallel
-        cl_task = generate_cover_letter(master_resume_json, job_title, company_name or "", job_description, user_name)
+        cl_task = generate_cover_letter(master_resume_json, job_title, company_name or "", job_description, user_name, relevant_cover_letters=relevant_cover_letters)
         resume, cover_letter = await asyncio.gather(resume_task, cl_task)
         return resume, cover_letter
     else:

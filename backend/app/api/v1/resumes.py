@@ -216,11 +216,19 @@ async def analyze_resume_endpoint(
         raise HTTPException(status_code=400, detail="Resume has no text content")
 
     analysis_dict = analyze_resume(resume.raw_text)
+
+    # Retrieve similar benchmarks using RAG
+    from app.services.rag_service import rag_service
+    benchmarks = await rag_service.retrieve_similar_benchmarks(
+        resume_text=resume.raw_text,
+        db=db,
+        limit=5
+    )
+
     analysis = AnalysisResult(
         id=uuid.uuid4(),
         resume_id=resume_id,
         user_id=current_user.id,
-        status="completed",
         ats_score=analysis_dict["ats_score"],
         recruiter_score=analysis_dict["recruiter_score"],
         overall_score=analysis_dict["overall_score"],
@@ -229,6 +237,7 @@ async def analyze_resume_endpoint(
         missing_keywords=analysis_dict["missing_keywords"],
         suggestions=analysis_dict["suggestions"],
         matched_keywords=analysis_dict.get("matched_keywords"),
+        reference_comparisons=benchmarks,
     )
     db.add(analysis)
     await db.commit()
