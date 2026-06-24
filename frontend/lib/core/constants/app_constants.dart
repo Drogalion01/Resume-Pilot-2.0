@@ -3,9 +3,13 @@
 class AppConstants {
   AppConstants._();
 
-  // ── API ────────────────────────────────────────────────────────────────────
-  static const String baseUrl = 'https://resume-pilot-2-0.vercel.app/api/v1'; // Android emulator → localhost
-  // static const String baseUrl = 'https://resumepilot-api.onrender.com/api/v1'; // Production
+  // Use dart defines if provided (e.g. for Vercel deployment), otherwise fallback to production custom domain
+  static const String _rawBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://api.resume-pilot.tech',
+  );
+  
+  static const String baseUrl = '$_rawBaseUrl/api/v1';
 
   // ── Secure Storage Keys ────────────────────────────────────────────────────
   static const String accessTokenKey  = 'rp_access_token';
