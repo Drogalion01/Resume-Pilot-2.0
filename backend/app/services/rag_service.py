@@ -154,7 +154,7 @@ class RAGService:
                 try:
                     sample_text = resume_text[:1000]
                     response = await gemini_client.aio.models.embed_content(
-                        model="text-embedding-004",
+                        model="gemini-embedding-2",
                         contents=sample_text
                     )
                     if response.embeddings:

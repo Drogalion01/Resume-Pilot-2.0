@@ -51,19 +51,43 @@ async def embed_texts_gemini(texts: List[str], api_key: str) -> List[List[float]
     batch_size = 50
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i+batch_size]
-        try:
-            logger.info(f"Generating embeddings for batch {i//batch_size + 1}/{(len(texts)-1)//batch_size + 1}...")
-            response = client.models.embed_content(
-                model="text-embedding-004",
-                contents=batch
-            )
-            for emb in response.embeddings:
-                embeddings.append(emb.values)
-        except Exception as exc:
-            logger.error(f"Error generating embeddings for batch starting at index {i}: {exc}")
-            # Fallback placeholder vectors for this batch
+        success = False
+        retries = 0
+        
+        while not success and retries < 5:
+            try:
+                logger.info(f"Generating embeddings for batch {i//batch_size + 1}/{(len(texts)-1)//batch_size + 1} (Attempt {retries+1})...")
+                response = client.models.embed_content(
+                    model="gemini-embedding-2",
+                    contents=batch
+                )
+                
+                # Verify we got the correct number of embeddings back
+                if not response.embeddings or len(response.embeddings) != len(batch):
+                    raise ValueError(f"API returned {len(response.embeddings) if response.embeddings else 0} embeddings, expected {len(batch)}")
+                    
+                for emb in response.embeddings:
+                    embeddings.append(emb.values)
+                success = True
+                
+            except Exception as exc:
+                error_msg = str(exc)
+                if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                    logger.warning(f"Rate limit hit! Sleeping for 10 seconds before retrying...")
+                    await asyncio.sleep(10)
+                    retries += 1
+                else:
+                    logger.error(f"Fatal error generating embeddings for batch starting at index {i}: {exc}")
+                    break
+        
+        if not success:
+            logger.error(f"Failed to generate embeddings for batch {i} after {retries} retries. Using placeholders.")
             for _ in batch:
-                embeddings.append([0.0] * 768)
+                embeddings.append([0.0] * 3072)
+                
+        # Proactive rate limiting: Free tier has 15 RPM limit (~1 request every 4 seconds)
+        await asyncio.sleep(4.5)
+        
     return embeddings
 
 async def main():
@@ -154,11 +178,11 @@ async def main():
     # 3. Generate embeddings
     texts_to_embed = [rec["raw_text"] for rec in all_records]
     if api_key:
-        logger.info(f"Generating embeddings using Gemini model text-embedding-004...")
+        logger.info(f"Generating embeddings using Gemini model gemini-embedding-2...")
         embeddings = await embed_texts_gemini(texts_to_embed, api_key)
     else:
-        logger.info("Using placeholder zero-vector embeddings (768 dimensions)...")
-        embeddings = [[0.0] * 768 for _ in range(len(all_records))]
+        logger.info("Using placeholder zero-vector embeddings (3072 dimensions)...")
+        embeddings = [[0.0] * 3072 for _ in range(len(all_records))]
 
     # Add embeddings back to records
     for idx, rec in enumerate(all_records):
@@ -176,13 +200,14 @@ async def main():
         # Create extension and table
         logger.info("Ensuring pgvector extension and table exist...")
         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        await conn.execute("DROP TABLE IF EXISTS ats_resume_benchmarks;")
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS ats_resume_benchmarks (
+            CREATE TABLE ats_resume_benchmarks (
                 id SERIAL PRIMARY KEY,
                 source VARCHAR(50) NOT NULL,
                 raw_text TEXT NOT NULL,
                 metadata JSONB NOT NULL,
-                embedding vector(768)
+                embedding vector(3072)
             );
         """)
         
