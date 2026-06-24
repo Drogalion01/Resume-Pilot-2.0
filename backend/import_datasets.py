@@ -70,6 +70,15 @@ async def main():
     api_key = os.environ.get("GEMINI_API_KEY")
     if len(sys.argv) > 1:
         api_key = sys.argv[1]
+    
+    if not api_key:
+        env_path = os.path.join(BACKEND_DIR, ".env")
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                for line in f:
+                    if line.startswith("GEMINI_API_KEY="):
+                        api_key = line.strip().split("=", 1)[1].strip('"').strip("'")
+                        break
 
     if not api_key:
         logger.warning(

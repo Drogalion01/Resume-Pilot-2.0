@@ -358,7 +358,7 @@ async def issue_access_token(user: User) -> str:
         tier=user.subscription_tier,
         private_key=settings.JWT_PRIVATE_KEY,
         algorithm=settings.JWT_ALGORITHM,
-        expires_delta_minutes=60,
+        expires_in_minutes=60,
     )
 
 async def issue_refresh_token(user: User, ip: str, db: AsyncSession) -> Tuple[str, str]:

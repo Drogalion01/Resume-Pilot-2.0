@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import List, Optional
 
-from pydantic import field_validator
+from pydantic import Field, AliasChoices, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,9 +33,9 @@ class Settings(BaseSettings):
 
     # ── Email (Resend) ──────────────────────────────────────────────────────────
     RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "ResumePilot <noreply@resumepilot.app>"
+    EMAIL_FROM: str = Field("ResumePilot <noreply@resumepilot.app>", validation_alias=AliasChoices("EMAIL_FROM", "FROM_EMAIL"))
     APP_DEEP_LINK_BASE: str = "resumepilot://app"
-    APP_WEB_BASE_URL: str = "http://localhost:3000"  # for magic link URLs
+    APP_WEB_BASE_URL: str = Field("http://localhost:3000", validation_alias=AliasChoices("APP_WEB_BASE_URL", "APP_URL", "FRONTEND_URL"))
 
     # ── Encryption (Fernet — AES-256-GCM) ───────────────────────────────────────
     TOKEN_ENCRYPTION_KEY: str = ""  # base64url-encoded 32-byte key
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
 
     # ── App ─────────────────────────────────────────────────────────────────────
     APP_NAME: str = "ResumePilot"
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = Field("http://localhost:3000", validation_alias=AliasChoices("FRONTEND_URL", "APP_URL"))
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
     DEBUG: bool = False
 
