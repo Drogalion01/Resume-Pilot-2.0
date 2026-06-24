@@ -73,10 +73,13 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       switch (authState) {
         case AuthStateInitial() || AuthStateLoading():
+          // Don't redirect if we are on a deep link like /auth/verify, otherwise we lose the token!
+          if (location.startsWith(Routes.magicLinkVerify)) return null;
           return location == Routes.splash ? null : Routes.splash;
 
         case AuthStateMagicLinkSent():
-          if (location == Routes.magicLink) return null;
+          // Allow users to hit the verify deep link even if their app is still in the "Sent" state
+          if (location == Routes.magicLink || location.startsWith(Routes.magicLinkVerify)) return null;
           return Routes.magicLink;
 
         case AuthStateAuthenticated():
