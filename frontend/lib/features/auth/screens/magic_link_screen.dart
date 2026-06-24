@@ -86,7 +86,16 @@ class _MagicLinkScreenState extends ConsumerState<MagicLinkScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded, color: PremiumTheme.textPrimary),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (_sent) {
+              // Go back to email input view
+              setState(() => _sent = false);
+            } else {
+              // Reset the auth state so GoRouter doesn't trap us here, then pop back to Landing
+              ref.read(authNotifierProvider.notifier).resetState();
+              context.pop();
+            }
+          },
         ),
       ),
       body: SafeArea(

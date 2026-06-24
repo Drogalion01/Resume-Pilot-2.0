@@ -183,6 +183,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
+  
+  void resetState() {
+    state = const AuthStateUnauthenticated();
+  }
 
   /// Handles AuthResponse {access_token, refresh_token, user}
   void _handleAuthResponse(Map<String, dynamic> data) {
