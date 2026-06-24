@@ -9,7 +9,7 @@ class AppConstants {
     defaultValue: 'https://api.resume-pilot.tech',
   );
   
-  static const String baseUrl = '$_rawBaseUrl/api/v1';
+  static const String baseUrl = '$_rawBaseUrl/api/v1'.replaceAll('//api/v1', '/api/v1');
 
   // ── Secure Storage Keys ────────────────────────────────────────────────────
   static const String accessTokenKey  = 'rp_access_token';
