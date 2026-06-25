@@ -2,22 +2,34 @@
 <title>Authentication complete</title>
 <p>Authentication is complete. If this does not happen automatically, please close the window.</p>
 <script>
-  // Try postMessage to opener (works when opened as popup)
-  if (window.opener) {
-    window.opener.postMessage({
-      'flutter-web-auth-2': window.location.href
-    }, '*');
-    window.close();
-  } else {
-    // Fallback: if opened as a new tab, window.opener is null.
-    // Try to use BroadcastChannel as a fallback.
-    try {
-      var bc = new BroadcastChannel('flutter-web-auth-2');
-      bc.postMessage({ 'flutter-web-auth-2': window.location.href });
-      bc.close();
-    } catch (e) {}
-    // Show a message asking the user to close this tab.
-    document.querySelector('p').textContent =
-      'Authentication complete! You can close this tab and return to Resume Pilot.';
-  }
+  (function () {
+    var payload = { 'flutter-web-auth-2': window.location.href };
+
+    function notifyParent() {
+      try {
+        if (window.opener) {
+          window.opener.postMessage(payload, '*');
+        }
+      } catch (e) {}
+
+      try {
+        var bc = new BroadcastChannel('flutter-web-auth-2');
+        bc.postMessage(payload);
+        bc.close();
+      } catch (e) {}
+    }
+
+    notifyParent();
+
+    setTimeout(function () {
+      try {
+        window.close();
+      } catch (e) {}
+    }, 100);
+
+    setTimeout(function () {
+      document.querySelector('p').textContent =
+        'Authentication complete. You can close this tab and return to Resume Pilot.';
+    }, 300);
+  })();
 </script>

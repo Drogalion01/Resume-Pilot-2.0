@@ -78,8 +78,9 @@ def send_verification_email(
 def send_magic_link(to_email: str, raw_token: str) -> bool:
     """
     Send passwordless magic link sign-in email.
-    Link directs user to the frontend verify endpoint with the token.
+  The primary link opens the mobile app via deep link, with a browser fallback.
     """
+  app_link = f"{settings.APP_DEEP_LINK_BASE}/auth/verify?token={raw_token}"
     verify_url = f"{settings.APP_WEB_BASE_URL}/auth/verify?token={raw_token}"
     name = to_email.split("@")[0]
 
@@ -90,13 +91,17 @@ def send_magic_link(to_email: str, raw_token: str) -> bool:
       <div style="max-width: 520px; margin: 0 auto; background: #1a1a2e; border-radius: 16px; padding: 40px; border: 1px solid #7c3aed22;">
         <h1 style="color: #a78bfa; margin-bottom: 8px;">Sign in to ResumePilot 🔐</h1>
         <p style="color: #94a3b8;">Hi {name}, click the button below to sign in to your account.</p>
-        <a href="{verify_url}"
+        <a href="{app_link}"
            style="display:inline-block; margin-top:24px; padding:14px 32px;
                   background:linear-gradient(135deg,#7c3aed,#4f46e5);
                   color:#fff; border-radius:10px; text-decoration:none;
                   font-weight:600; font-size:16px;">
-          Sign In
+          Open in app
         </a>
+        <p style="margin-top:18px; color:#94a3b8; font-size:14px;">
+          If the app does not open, use this browser link:
+          <a href="{verify_url}" style="color:#a78bfa; text-decoration:none;">Sign in on the web</a>
+        </p>
         <p style="margin-top:32px; color:#64748b; font-size:13px;">
           This link expires in 15 minutes and can be used only once. If you didn't request this, ignore this email.
         </p>

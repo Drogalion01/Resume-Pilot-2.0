@@ -118,6 +118,7 @@ async def oauth_callback(
     db: AsyncSession = Depends(get_db),
 ):
     try:
+        auth_service.consume_oauth_state(provider, body.state)
         tokens = await auth_service.exchange_code_for_tokens(provider, body.code, body.redirect_uri)
         access_token = tokens.get("access_token")
         if not access_token:

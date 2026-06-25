@@ -161,11 +161,26 @@ async def verify_magic_link(raw_token: str, db: AsyncSession) -> User:
 # OAuth 2.0
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_oauth_states: dict[str, tuple[str, datetime]] = {}
+
 async def generate_oauth_state(provider: str) -> Tuple[str, str]:
     state = secrets.token_urlsafe(32)
     state_hash = hash_token(state)
-    # TODO: store state_hash in Redis with 10min expiry
+        _oauth_states[state] = (provider, datetime.now(timezone.utc) + timedelta(minutes=10))
     return state, state_hash
+
+
+def consume_oauth_state(provider: str, state: str) -> None:
+        record = _oauth_states.get(state)
+        if not record:
+            raise AuthenticationError("Invalid or expired OAuth state")
+
+        stored_provider, expires_at = record
+        if stored_provider != provider or expires_at <= datetime.now(timezone.utc):
+            _oauth_states.pop(state, None)
+            raise AuthenticationError("Invalid or expired OAuth state")
+
+        _oauth_states.pop(state, None)
 
 
 async def exchange_code_for_tokens(provider: str, code: str, redirect_uri: str) -> dict:

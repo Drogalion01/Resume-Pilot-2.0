@@ -15,6 +15,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_notifier.dart';
 import '../../core/auth/auth_state.dart';
 import '../../features/auth/screens/landing_screen.dart';
+import '../../features/auth/screens/oauth_callback_screen.dart';
 import '../../features/auth/screens/magic_link_screen.dart';
 import '../../features/auth/screens/magic_link_verify_screen.dart';
 import '../../features/applications/screens/application_list_screen.dart';
@@ -55,8 +56,6 @@ class Routes {
 // ── Provider ───────────────────────────────────────────────────────────────────
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authNotifier = ref.read(authNotifierProvider.notifier);
-
   return GoRouter(
     initialLocation: Routes.splash,
     refreshListenable: _AuthStateListenable(ref),
@@ -102,6 +101,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ── Auth screens (full-screen, no shell) ─────────────────────────────
       GoRoute(path: Routes.landing,   builder: (_, __) => const LandingScreen()),
       GoRoute(path: Routes.magicLink, builder: (_, __) => const MagicLinkScreen()),
+
+      GoRoute(
+        path: '/auth/callback/:provider',
+        builder: (_, state) {
+          final provider = state.pathParameters['provider'] ?? '';
+          final code = state.uri.queryParameters['code'] ?? '';
+          final callbackState = state.uri.queryParameters['state'] ?? '';
+          return OAuthCallbackScreen(
+            provider: provider,
+            code: code,
+            callbackState: callbackState,
+          );
+        },
+      ),
 
       // Magic link deep link: /auth/verify?token=<token>
       GoRoute(

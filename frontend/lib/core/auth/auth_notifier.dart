@@ -16,6 +16,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../constants/app_constants.dart';
 import '../models/user_model.dart';
@@ -114,7 +115,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       // 1. Get the authorization URL from backend
       final String redirectUri = kIsWeb
-          ? '${Uri.base.origin}/auth.html'
+          ? '${Uri.base.origin}/auth/callback/$provider'
           : '${AppConstants.deepLinkBase}/auth/callback/$provider';
 
       final res = await _client.dio.get(
@@ -126,6 +127,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final data = res.data as Map<String, dynamic>;
       final authUrl = data['authorization_url'] as String;
       final expectedState = data['state'] as String;
+
+      if (kIsWeb) {
+        await launchUrl(
+          Uri.parse(authUrl),
+          webOnlyWindowName: '_self',
+        );
+        return;
+      }
 
       // 2. Open in-app browser (flutter_web_auth_2 — PKCE safe)
       final result = await FlutterWebAuth2.authenticate(
@@ -161,6 +170,31 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = AuthStateError(message: _extractError(e, 'OAuth sign-in failed'));
     } catch (e) {
       state = AuthStateError(message: 'OAuth was cancelled');
+    }
+  }
+
+  Future<void> completeOAuthCallback({
+    required String provider,
+    required String code,
+    required String stateParam,
+  }) async {
+    if (code.isEmpty || stateParam.isEmpty) {
+      state = const AuthStateError(message: 'OAuth callback is missing code or state');
+      return;
+    }
+
+    try {
+      final callbackRes = await _client.dio.post(
+        '/auth/oauth/$provider/callback',
+        data: {
+          'code': code,
+          'state': stateParam,
+          'redirect_uri': '${Uri.base.origin}/auth/callback/$provider',
+        },
+      );
+      _handleAuthResponse(callbackRes.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      state = AuthStateError(message: _extractError(e, 'OAuth sign-in failed'));
     }
   }
 
