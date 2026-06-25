@@ -38,22 +38,15 @@ class NotificationService {
       iOS: initializationSettingsIOS,
     );
 
-    // Use dynamic to bypass strict dart2js signature checks which differ on web
-    dynamic plugin = _flutterLocalNotificationsPlugin;
     try {
-      // First try named parameters (older/some versions)
-      await plugin.initialize(
+      await _flutterLocalNotificationsPlugin.initialize(
         initializationSettings: initializationSettings,
-        onDidReceiveNotificationResponse: (details) {
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
           // Handle notification tap
         },
       );
     } catch (e) {
-      // Fallback to positional (newer versions)
-      await plugin.initialize(
-        initializationSettings,
-        onDidReceiveNotificationResponse: (details) {},
-      );
+      // Ignore
     }
   }
 
@@ -65,9 +58,8 @@ class NotificationService {
   }) async {
     if (kIsWeb || scheduledDate.isBefore(DateTime.now())) return;
 
-    dynamic plugin = _flutterLocalNotificationsPlugin;
     try {
-      await plugin.zonedSchedule(
+      await _flutterLocalNotificationsPlugin.zonedSchedule(
         id: id,
         title: title,
         body: body,
@@ -91,15 +83,14 @@ class NotificationService {
         // uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       );
     } catch (e) {
-      // Handle signature mismatch gracefully if occurs
+      // Handle gracefully
     }
   }
 
   Future<void> cancelReminder(int id) async {
     if (kIsWeb) return;
-    dynamic plugin = _flutterLocalNotificationsPlugin;
     try {
-      await plugin.cancel(id);
+      await _flutterLocalNotificationsPlugin.cancel(id: id);
     } catch (e) {
       // Ignore
     }
