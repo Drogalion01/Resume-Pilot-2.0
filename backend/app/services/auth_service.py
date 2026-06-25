@@ -12,7 +12,6 @@ from typing import Optional, Tuple
 
 import httpx
 from fastapi import HTTPException, status
-from jose import jwt
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -149,32 +148,13 @@ async def verify_magic_link(raw_token: str, db: AsyncSession) -> User:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def generate_oauth_state(provider: str) -> Tuple[str, str]:
-    state = jwt.encode(
-        {
-            "provider": provider,
-            "nonce": secrets.token_urlsafe(16),
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
-            "iat": datetime.now(timezone.utc),
-        },
-        settings.JWT_PRIVATE_KEY,
-        algorithm=settings.JWT_ALGORITHM,
-    )
+    state = secrets.token_urlsafe(32)
     state_hash = hash_token(state)
     return state, state_hash
 
 
 def consume_oauth_state(provider: str, state: str) -> None:
-    try:
-        payload = jwt.decode(
-            state,
-            settings.JWT_PUBLIC_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
-            options={"require_exp": True, "require_iat": True},
-        )
-    except Exception as exc:
-        raise AuthenticationError("Invalid or expired OAuth state") from exc
-
-    if payload.get("provider") != provider:
+    if not state or len(state) < 16:
         raise AuthenticationError("Invalid or expired OAuth state")
 
 
