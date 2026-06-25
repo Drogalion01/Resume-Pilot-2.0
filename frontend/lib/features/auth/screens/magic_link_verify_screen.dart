@@ -10,6 +10,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -29,15 +30,18 @@ class MagicLinkVerifyScreen extends ConsumerStatefulWidget {
 
 class _MagicLinkVerifyScreenState
     extends ConsumerState<MagicLinkVerifyScreen> {
-  bool _verified = false;
+  bool _verificationStarted = false;
 
   @override
   void initState() {
     super.initState();
-    // Verify immediately on mount
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(authNotifierProvider.notifier).verifyMagicLink(widget.token);
-    });
+    if (!kIsWeb) {
+      // Native apps can complete automatically because the token arrives via a trusted app deep link.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(authNotifierProvider.notifier).verifyMagicLink(widget.token);
+      });
+      _verificationStarted = true;
+    }
   }
 
   @override
@@ -67,6 +71,15 @@ class _MagicLinkVerifyScreenState
       ).animate().fadeIn();
     }
 
+    if (kIsWeb && !_verificationStarted) {
+      return _WebConfirmView(
+        onContinue: () {
+          setState(() => _verificationStarted = true);
+          ref.read(authNotifierProvider.notifier).verifyMagicLink(widget.token);
+        },
+      ).animate().fadeIn();
+    }
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -75,7 +88,7 @@ class _MagicLinkVerifyScreenState
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            color: PremiumTheme.accent.withOpacity(0.15),
+            color: PremiumTheme.accent.withValues(alpha: 0.15),
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.description_rounded,
@@ -118,6 +131,52 @@ class _MagicLinkVerifyScreenState
   }
 }
 
+class _WebConfirmView extends StatelessWidget {
+  final VoidCallback onContinue;
+  const _WebConfirmView({required this.onContinue});
+
+  @override
+  Widget build(BuildContext context) => Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+                color: PremiumTheme.accent.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.lock_open_rounded,
+                color: PremiumTheme.accent, size: 40),
+          ),
+          const SizedBox(height: 24),
+          Text('Continue sign in',
+              style: PremiumTheme.headline2(PremiumTheme.textPrimary),
+              textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          Text(
+            'Tap continue to verify your magic link in the browser.',
+            textAlign: TextAlign.center,
+            style: PremiumTheme.body(PremiumTheme.textSecondary),
+          ),
+          const SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: onContinue,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: PremiumTheme.accent,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text('Continue in browser',
+                style: PremiumTheme.body(Colors.white)
+                    .copyWith(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      );
+}
+
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
@@ -131,7 +190,7 @@ class _ErrorView extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: PremiumTheme.error.withOpacity(0.12),
+                color: PremiumTheme.error.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.error_outline_rounded,
