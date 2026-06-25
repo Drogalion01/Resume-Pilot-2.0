@@ -14,6 +14,8 @@ from app.config import settings
 from app.core.security import verify_token
 from app.database import get_db
 from app.models.user import User
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 
 from fastapi.security import OAuth2PasswordBearer
@@ -48,7 +50,10 @@ async def get_current_user(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user ID in token")
         
-    user = await db.get(User, user_uuid)
+    result = await db.execute(
+        select(User).options(selectinload(User.settings)).where(User.id == user_uuid)
+    )
+    user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

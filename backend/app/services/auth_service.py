@@ -14,6 +14,7 @@ import httpx
 from fastapi import HTTPException, status
 from passlib.context import CryptContext
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -131,7 +132,10 @@ async def verify_magic_link(raw_token: str, db: AsyncSession) -> User:
         raise AuthenticationError("Invalid or expired magic link")
 
     token_record.used_at = datetime.now(timezone.utc)
-    user = await db.get(User, token_record.user_id)
+    result_user = await db.execute(
+        select(User).options(selectinload(User.settings)).where(User.id == token_record.user_id)
+    )
+    user = result_user.scalar_one_or_none()
     if not user or not user.is_active:
         raise AuthenticationError("User not found or inactive")
 
@@ -290,11 +294,15 @@ async def upsert_oauth_user(
     )
     oauth_acc = result.scalar_one_or_none()
     if oauth_acc:
-        user = await db.get(User, oauth_acc.user_id)
-        return user
+        result_user = await db.execute(
+            select(User).options(selectinload(User.settings)).where(User.id == oauth_acc.user_id)
+        )
+        return result_user.scalar_one_or_none()
 
     # By email
-    result = await db.execute(select(User).where(User.email == email))
+    result = await db.execute(
+        select(User).options(selectinload(User.settings)).where(User.email == email)
+    )
     user = result.scalar_one_or_none()
     if user:
         oauth = OAuthAccount(
