@@ -116,9 +116,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = const AuthStateLoading();
     try {
       // 1. Get the authorization URL from backend
+      // Note: We ALWAYS use the https web domain for OAuth callbacks because 
+      // providers (GitHub, LinkedIn) do not allow custom schemes like resumepilot://.
+      // The Android App intercepts the https://resume-pilot.tech URL via intent-filters.
       final String redirectUri = kIsWeb
           ? '${Uri.base.origin}/auth/callback/$provider'
-          : '${AppConstants.deepLinkBase}/auth/callback/$provider';
+          : 'https://resume-pilot.tech/auth/callback/$provider';
 
       final res = await _client.dio.get(
         '/auth/oauth/$provider/authorize',

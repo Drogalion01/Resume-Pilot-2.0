@@ -25,7 +25,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- Deep link handler for magic links and OAuth callbacks -->
+            <!-- Deep link handler for custom scheme (legacy/fallbacks) -->
             <!-- resumepilot://app/auth/verify?token=<token>          -->
             <!-- resumepilot://app/auth/callback/{provider}?code=...  -->
             <intent-filter android:autoVerify="false">
@@ -33,6 +33,16 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="resumepilot"/>
+            </intent-filter>
+
+            <!-- Deep link handler for web domain (Magic Links) -->
+            <!-- https://resume-pilot.tech/auth/verify?token=<token> -->
+            <!-- https://resume-pilot.tech/auth/callback/... -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="resume-pilot.tech" android:pathPrefix="/auth/"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
