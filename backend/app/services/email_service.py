@@ -78,9 +78,9 @@ def send_verification_email(
 def send_magic_link(to_email: str, raw_token: str) -> bool:
     """
     Send passwordless magic link sign-in email.
-  The primary link opens the mobile app via deep link, with a browser fallback.
+    The primary link opens the mobile app via deep link, with a browser fallback.
     """
-  app_link = f"{settings.APP_DEEP_LINK_BASE}/auth/verify?token={raw_token}"
+    app_link = f"{settings.APP_DEEP_LINK_BASE}/auth/verify?token={raw_token}"
     verify_url = f"{settings.APP_WEB_BASE_URL}/auth/verify?token={raw_token}"
     name = to_email.split("@")[0]
 
