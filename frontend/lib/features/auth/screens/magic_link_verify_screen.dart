@@ -28,8 +28,7 @@ class MagicLinkVerifyScreen extends ConsumerStatefulWidget {
       _MagicLinkVerifyScreenState();
 }
 
-class _MagicLinkVerifyScreenState
-    extends ConsumerState<MagicLinkVerifyScreen> {
+class _MagicLinkVerifyScreenState extends ConsumerState<MagicLinkVerifyScreen> {
   bool _verificationStarted = false;
 
   @override
@@ -93,9 +92,7 @@ class _MagicLinkVerifyScreenState
           ),
           child: const Icon(Icons.description_rounded,
               color: PremiumTheme.accent, size: 40),
-        )
-            .animate(onPlay: (c) => c.repeat(reverse: true))
-            .scale(
+        ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(
               begin: const Offset(0.95, 0.95),
               end: const Offset(1.05, 1.05),
               duration: 1000.ms,
@@ -143,7 +140,7 @@ class _WebConfirmView extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-                color: PremiumTheme.accent.withValues(alpha: 0.15),
+              color: PremiumTheme.accent.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.lock_open_rounded,
@@ -164,8 +161,7 @@ class _WebConfirmView extends StatelessWidget {
             onPressed: onContinue,
             style: ElevatedButton.styleFrom(
               backgroundColor: PremiumTheme.accent,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
@@ -190,34 +186,27 @@ class _ErrorView extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-                color: PremiumTheme.error.withValues(alpha: 0.12),
+              color: PremiumTheme.error.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.error_outline_rounded,
                 color: PremiumTheme.error, size: 40),
           ),
-
           const SizedBox(height: 24),
-
           Text('Link expired or invalid',
               style: PremiumTheme.headline2(PremiumTheme.textPrimary)),
-
           const SizedBox(height: 12),
-
           Text(
             message,
             textAlign: TextAlign.center,
             style: PremiumTheme.body(PremiumTheme.textSecondary),
           ),
-
           const SizedBox(height: 32),
-
           ElevatedButton(
             onPressed: onRetry,
             style: ElevatedButton.styleFrom(
               backgroundColor: PremiumTheme.accent,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
