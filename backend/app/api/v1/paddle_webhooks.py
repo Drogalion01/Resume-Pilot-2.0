@@ -21,10 +21,17 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 def verify_paddle_signature(request_body: str, signature_header: str, secret: str) -> bool:
+    """Verify Paddle webhook signature. Header format: 'ts=TIMESTAMP;h1=HASH'"""
     try:
-        parts = dict(part.split('=') for part in signature_header.split(';'))
-        ts = parts['ts']
-        h1 = parts['h1']
+        parts = {}
+        for part in signature_header.split(';'):
+            if '=' in part:
+                k, v = part.split('=', 1)
+                parts[k.strip()] = v.strip()
+        ts = parts.get('ts')
+        h1 = parts.get('h1')
+        if not ts or not h1:
+            return False
         
         payload = f"{ts}:{request_body}"
         mac = hmac.new(

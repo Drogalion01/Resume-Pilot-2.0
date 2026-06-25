@@ -22,7 +22,9 @@ class ResumeRepository {
 
   Future<Resume> fetchResume(String id) async {
     final res = await _dio.get('/resumes/$id');
-    return Resume.fromJson(res.data as Map<String, dynamic>);
+    final data = res.data as Map<String, dynamic>;
+    // Backend returns ResumeWithVersions: {resume: {...}, versions: [...], latest_analysis: {...}}
+    return Resume.fromJson(data['resume'] as Map<String, dynamic>);
   }
 
   Future<Resume> uploadResume({
@@ -48,8 +50,11 @@ class ResumeRepository {
   }
 
   Future<List<ResumeVersion>> fetchVersions(String resumeId) async {
-    final res = await _dio.get('/resumes/$resumeId/versions');
-    return (res.data as List)
+    // GET /resumes/{id} already returns versions — use that to save a round-trip
+    final res = await _dio.get('/resumes/$resumeId');
+    final data = res.data as Map<String, dynamic>;
+    final versionsList = data['versions'] as List? ?? [];
+    return versionsList
         .map((e) => ResumeVersion.fromJson(e as Map<String, dynamic>))
         .toList();
   }

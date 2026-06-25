@@ -76,7 +76,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _client.dio.post(
         '/auth/magic-link/send',
-        queryParameters: {'email': email},
+        data: {'email': email},
       );
       state = AuthStateMagicLinkSent(email: email);
     } on DioException catch (e) {
@@ -95,9 +95,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     state = const AuthStateLoading();
     try {
+      // Token must go in the JSON body — backend reads MagicLinkVerifyRequest {token}
       final res = await _client.dio.post(
         '/auth/magic-link/verify',
-        queryParameters: {'token': token},
+        data: {'token': token},
       );
       _handleAuthResponse(res.data as Map<String, dynamic>);
       // Do NOT clear _verifyingToken on success to prevent remount race conditions

@@ -59,9 +59,13 @@ async def list_resumes(
         latest = analysis.scalar_one_or_none()
         items.append({
             "id": r.id,
+            "user_id": r.user_id,
             "title": r.title,
+            "original_filename": r.original_filename,
             "file_type": r.file_type,
+            "is_master": r.is_master,
             "created_at": r.created_at,
+            "updated_at": r.updated_at,
             "latest_score": latest.overall_score if latest else None,
         })
     return items

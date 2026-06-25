@@ -8,6 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import CurrentUser, get_db
 from app.models.application import Application, ApplicationStatus, Interview, Note, Reminder, TimelineEvent
@@ -105,7 +106,19 @@ async def create_application(
         description="Initial tracking entry created",
     )
     await db.commit()
-    await db.refresh(app)
+
+    # Reload with all relationships eagerly to avoid MissingGreenlet on serialization
+    result = await db.execute(
+        select(Application)
+        .options(
+            selectinload(Application.interviews),
+            selectinload(Application.reminders),
+            selectinload(Application.notes),
+            selectinload(Application.timeline_events),
+        )
+        .where(Application.id == app.id)
+    )
+    app = result.scalar_one()
     return ApplicationDetail.model_validate(app)
 
 
@@ -122,6 +135,12 @@ async def get_application(
     """Get a single application with all related data (interviews, reminders, notes, timeline)."""
     result = await db.execute(
         select(Application)
+        .options(
+            selectinload(Application.interviews),
+            selectinload(Application.reminders),
+            selectinload(Application.notes),
+            selectinload(Application.timeline_events),
+        )
         .where(Application.id == app_id, Application.user_id == current_user.id)
     )
     app = result.scalar_one_or_none()
@@ -139,7 +158,14 @@ async def update_application(
 ):
     """Update application details. If status changes, logs timeline event."""
     result = await db.execute(
-        select(Application).where(
+        select(Application)
+        .options(
+            selectinload(Application.interviews),
+            selectinload(Application.reminders),
+            selectinload(Application.notes),
+            selectinload(Application.timeline_events),
+        )
+        .where(
             Application.id == app_id,
             Application.user_id == current_user.id,
         )
@@ -197,7 +223,14 @@ async def update_status(
 ):
     """Quick status update endpoint. Logs timeline."""
     result = await db.execute(
-        select(Application).where(
+        select(Application)
+        .options(
+            selectinload(Application.interviews),
+            selectinload(Application.reminders),
+            selectinload(Application.notes),
+            selectinload(Application.timeline_events),
+        )
+        .where(
             Application.id == app_id,
             Application.user_id == current_user.id,
         )

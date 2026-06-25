@@ -13,8 +13,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/router/router.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../app/theme/premium_theme.dart';
 import '../../../core/auth/auth_notifier.dart';
 import '../../../core/auth/auth_state.dart';
@@ -72,6 +74,7 @@ class _MagicLinkVerifyScreenState extends ConsumerState<MagicLinkVerifyScreen> {
 
     if (kIsWeb && !_verificationStarted) {
       return _WebConfirmView(
+        token: widget.token,
         onContinue: () {
           setState(() => _verificationStarted = true);
           ref.read(authNotifierProvider.notifier).verifyMagicLink(widget.token);
@@ -130,7 +133,8 @@ class _MagicLinkVerifyScreenState extends ConsumerState<MagicLinkVerifyScreen> {
 
 class _WebConfirmView extends StatelessWidget {
   final VoidCallback onContinue;
-  const _WebConfirmView({required this.onContinue});
+  final String token;
+  const _WebConfirmView({required this.onContinue, required this.token});
 
   @override
   Widget build(BuildContext context) => Column(
@@ -167,6 +171,24 @@ class _WebConfirmView extends StatelessWidget {
             ),
             child: Text('Continue in browser',
                 style: PremiumTheme.body(Colors.white)
+                    .copyWith(fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton(
+            onPressed: () async {
+              final url = Uri.parse('${AppConstants.deepLinkBase}/auth/verify?token=$token');
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url, mode: LaunchMode.externalApplication);
+              }
+            },
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: PremiumTheme.accent),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text('Open in App',
+                style: PremiumTheme.body(PremiumTheme.accent)
                     .copyWith(fontWeight: FontWeight.w600)),
           ),
         ],

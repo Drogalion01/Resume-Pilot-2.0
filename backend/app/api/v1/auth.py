@@ -17,11 +17,14 @@ from app.limiter import limiter
 from app.models.user import OAuthAccount, RefreshToken, User
 from app.schemas.auth import (
     AuthResponse,
+    MagicLinkSendRequest,
+    MagicLinkVerifyRequest,
     OAuthAuthorizeRequest,
     OAuthCallbackRequest,
     RefreshTokenRequest,
 )
 from app.schemas.user import CompleteOnboardingRequest, MeResponse, UserProfileOut
+from sqlalchemy.orm import selectinload
 from app.services import auth_service, email_service
 
 router = APIRouter()
@@ -36,18 +39,18 @@ logger = logging.getLogger(__name__)
 @limiter.limit("5/minute")
 async def magic_link_send(
     request: Request,
-    email: str,
+    body: MagicLinkSendRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     try:
         raw_token = await auth_service.send_magic_link(
-            email=email,
+            email=body.email,
             ip_address=request.client.host if request.client else "0.0.0.0",
             db=db,
         )
         if settings.RESEND_API_KEY:
-            background_tasks.add_task(email_service.send_magic_link, email, raw_token)
+            background_tasks.add_task(email_service.send_magic_link, body.email, raw_token)
         return {"message": "Magic link sent", "expires_in": 900}
     except HTTPException:
         raise
@@ -58,11 +61,12 @@ async def magic_link_send(
 
 @router.post("/magic-link/verify", response_model=AuthResponse)
 async def magic_link_verify(
-    token: str,
+    body: MagicLinkVerifyRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    """Verify a magic-link token. Accepts JSON body: {"token": "<raw_token>"}"""
     try:
-        user = await auth_service.verify_magic_link(token, db)
+        user = await auth_service.verify_magic_link(body.token, db)
     except Exception as exc:
         logger.warning("Magic link verify failed: %s", exc)
         raise HTTPException(status_code=401, detail=str(exc))
@@ -167,9 +171,13 @@ async def refresh_token(
             request.client.host if request.client else "0.0.0.0",
             db,
         )
-        payload = jwt.decode(new_access, settings.JWT_PUBLIC_KEY, algorithms=[settings.JWT_ALGORITHM])
+        from app.core.security import verify_token as _verify
+        payload = _verify(new_access, public_key=settings.JWT_PUBLIC_KEY, algorithm=settings.JWT_ALGORITHM)
         user_id = payload["sub"]
-        user = await db.get(User, uuid.UUID(str(user_id)))
+        result = await db.execute(
+            select(User).options(selectinload(User.settings)).where(User.id == uuid.UUID(str(user_id)))
+        )
+        user = result.scalar_one_or_none()
         if not user:
             raise AuthenticationError("User not found")
         return AuthResponse(

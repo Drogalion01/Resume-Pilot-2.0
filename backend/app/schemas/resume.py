@@ -38,9 +38,13 @@ class ResumeVersionCreateRequest(BaseModel):
 
 class ResumeListItem(BaseModel):
     id: uuid.UUID
+    user_id: uuid.UUID
     title: str
+    original_filename: Optional[str] = None
     file_type: Optional[str]
+    is_master: bool = False
     created_at: datetime
+    updated_at: datetime
     latest_score: Optional[int] = None  # overall_score from latest analysis
 
     model_config = ConfigDict(from_attributes=True)
@@ -48,9 +52,11 @@ class ResumeListItem(BaseModel):
 
 class ResumeDetail(BaseModel):
     id: uuid.UUID
+    user_id: uuid.UUID
     title: str
     original_filename: Optional[str]
     file_type: Optional[str]
+    file_path: Optional[str] = None
     raw_text: Optional[str] = None
     is_master: bool
     created_at: datetime
@@ -61,6 +67,8 @@ class ResumeDetail(BaseModel):
 
 class ResumeVersionOut(BaseModel):
     id: uuid.UUID
+    resume_id: uuid.UUID
+    user_id: uuid.UUID
     title: str
     content_json: dict
     job_title: Optional[str]
@@ -68,12 +76,16 @@ class ResumeVersionOut(BaseModel):
     company_name: Optional[str]
     generation_mode: ResumeVersionMode
     created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class AnalysisResultOut(BaseModel):
     id: uuid.UUID
+    user_id: Optional[uuid.UUID] = None
+    resume_id: Optional[uuid.UUID] = None
+    resume_version_id: Optional[uuid.UUID] = None
     ats_score: Optional[int] = None
     recruiter_score: Optional[int] = None
     overall_score: Optional[int] = None

@@ -56,6 +56,7 @@ class NoteCreate(BaseModel):
 
 class ApplicationListItem(BaseModel):
     id: uuid.UUID
+    user_id: uuid.UUID
     company_name: str
     role: str
     status: ApplicationStatus
@@ -67,12 +68,15 @@ class ApplicationListItem(BaseModel):
 
 class InterviewOut(BaseModel):
     id: uuid.UUID
+    application_id: uuid.UUID
+    user_id: uuid.UUID
     interview_type: str
     scheduled_at: datetime
     duration_minutes: Optional[int] = None
     location_or_link: Optional[str] = None
     notes: Optional[str] = None
     created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,9 +101,11 @@ class NoteOut(BaseModel):
 
 class TimelineEventOut(BaseModel):
     id: uuid.UUID
+    application_id: uuid.UUID
+    user_id: uuid.UUID
     event_type: str
     title: str
-    description: Optional[str] = None
+    description: str = ""  # Dart model requires non-null; default to empty string
     metadata_json: Optional[dict] = None
     created_at: datetime
 
@@ -108,6 +114,7 @@ class TimelineEventOut(BaseModel):
 
 class ApplicationDetail(BaseModel):
     id: uuid.UUID
+    user_id: uuid.UUID
     company_name: str
     role: str
     status: ApplicationStatus
