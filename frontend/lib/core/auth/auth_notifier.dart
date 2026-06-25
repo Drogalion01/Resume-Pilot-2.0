@@ -87,6 +87,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Step 2: Called from deep link — verifies token with backend.
   Future<void> verifyMagicLink(String token) async {
+    if (state is AuthStateAuthenticated) return; // Already logged in
     if (_verifyingToken == token) return; // Prevent double verification
     _verifyingToken = token;
     
@@ -97,10 +98,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         queryParameters: {'token': token},
       );
       _handleAuthResponse(res.data as Map<String, dynamic>);
+      // Do NOT clear _verifyingToken on success to prevent remount race conditions
     } on DioException catch (e) {
-      state = AuthStateError(message: _extractError(e, 'Invalid or expired magic link'));
-    } finally {
       _verifyingToken = null;
+      state = AuthStateError(message: _extractError(e, 'Invalid or expired magic link'));
     }
   }
 
