@@ -7,9 +7,6 @@
 //   • app_links listener (routes resumepilot:// deep links into GoRouter)
 //   • Portrait-lock + transparent status bar
 
-import 'dart:async';
-
-import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,10 +18,6 @@ import 'package:path_provider/path_provider.dart';
 import 'app/app.dart';
 import 'core/network/api_client.dart';
 import 'core/notifications/notification_service.dart';
-
-// Global navigator key — gives app_links access to GoRouter navigation
-// without needing a BuildContext.
-final _appLinks = AppLinks();
 
 void main() async {
   usePathUrlStrategy();

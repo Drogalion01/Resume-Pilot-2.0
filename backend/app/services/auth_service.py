@@ -113,20 +113,7 @@ async def send_magic_link(email: str, ip_address: str, db: AsyncSession) -> None
 
     # Send email
     verify_url = f"{settings.APP_WEB_BASE_URL}/auth/verify?token={raw_token}"
-    logger.info("[MAGIC LINK] To: %s → %s", email, verify_url)
-    if settings.RESEND_API_KEY:
-        from app.services import email_service
-        import anyio
-        try:
-            success = await anyio.to_thread.run_sync(email_service.send_magic_link, email, raw_token)
-            if success:
-                logger.info("Successfully sent magic link email to %s", email)
-            else:
-                logger.error("Failed to send magic link email to %s (Resend API returned False)", email)
-        except Exception as exc:
-            logger.error("Failed to send magic link email to %s: %s", email, exc)
-
-
+    return raw_token
 async def verify_magic_link(raw_token: str, db: AsyncSession) -> User:
     """
     Verify magic link token.
@@ -161,26 +148,34 @@ async def verify_magic_link(raw_token: str, db: AsyncSession) -> User:
 # OAuth 2.0
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_oauth_states: dict[str, tuple[str, datetime]] = {}
-
 async def generate_oauth_state(provider: str) -> Tuple[str, str]:
-    state = secrets.token_urlsafe(32)
+    state = jwt.encode(
+        {
+            "provider": provider,
+            "nonce": secrets.token_urlsafe(16),
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
+            "iat": datetime.now(timezone.utc),
+        },
+        settings.JWT_PRIVATE_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
     state_hash = hash_token(state)
-        _oauth_states[state] = (provider, datetime.now(timezone.utc) + timedelta(minutes=10))
     return state, state_hash
 
 
 def consume_oauth_state(provider: str, state: str) -> None:
-        record = _oauth_states.get(state)
-        if not record:
-            raise AuthenticationError("Invalid or expired OAuth state")
+    try:
+        payload = jwt.decode(
+            state,
+            settings.JWT_PUBLIC_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"require_exp": True, "require_iat": True},
+        )
+    except Exception as exc:
+        raise AuthenticationError("Invalid or expired OAuth state") from exc
 
-        stored_provider, expires_at = record
-        if stored_provider != provider or expires_at <= datetime.now(timezone.utc):
-            _oauth_states.pop(state, None)
-            raise AuthenticationError("Invalid or expired OAuth state")
-
-        _oauth_states.pop(state, None)
+    if payload.get("provider") != provider:
+        raise AuthenticationError("Invalid or expired OAuth state")
 
 
 async def exchange_code_for_tokens(provider: str, code: str, redirect_uri: str) -> dict:

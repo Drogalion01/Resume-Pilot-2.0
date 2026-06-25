@@ -41,11 +41,13 @@ async def magic_link_send(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        await auth_service.send_magic_link(
+        raw_token = await auth_service.send_magic_link(
             email=email,
             ip_address=request.client.host if request.client else "0.0.0.0",
             db=db,
         )
+        if settings.RESEND_API_KEY:
+            background_tasks.add_task(email_service.send_magic_link, email, raw_token)
         return {"message": "Magic link sent", "expires_in": 900}
     except HTTPException:
         raise

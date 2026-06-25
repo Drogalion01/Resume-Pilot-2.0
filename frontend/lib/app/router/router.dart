@@ -34,20 +34,20 @@ import '../shell/app_shell.dart';
 // ── Route paths (type-safe) ────────────────────────────────────────────────────
 
 class Routes {
-  static const splash          = '/splash';
-  static const landing         = '/landing';
-  static const magicLink       = '/auth/magic-link';
-  static const magicLinkVerify = '/auth/verify';   // deep link: ?token=
+  static const splash = '/splash';
+  static const landing = '/landing';
+  static const magicLink = '/auth/magic-link';
+  static const magicLinkVerify = '/auth/verify'; // deep link: ?token=
 
   // Shell tabs
-  static const dashboard   = '/';
+  static const dashboard = '/';
   static const applications = '/applications';
-  static const resumeLab   = '/resume-lab';
-  static const settings    = '/settings';
+  static const resumeLab = '/resume-lab';
+  static const settings = '/settings';
 
   // Full-screen routes (inside or outside shell)
-  static const upload      = '/resume-lab/upload';
-  static const generate    = '/resume-lab/generate';
+  static const upload = '/resume-lab/upload';
+  static const generate = '/resume-lab/generate';
   static const generationResult = '/resume-lab/result';
   static const applicationDetail = '/applications'; // Used prefix for detail id
   static const scheduleInterview = '/schedule-interview';
@@ -78,7 +78,10 @@ final routerProvider = Provider<GoRouter>((ref) {
 
         case AuthStateMagicLinkSent():
           // Allow users to hit the verify deep link even if their app is still in the "Sent" state
-          if (location == Routes.magicLink || location.startsWith(Routes.magicLinkVerify)) return null;
+          if (location == Routes.magicLink ||
+              location.startsWith(Routes.magicLinkVerify)) {
+            return null;
+          }
           return Routes.magicLink;
 
         case AuthStateAuthenticated():
@@ -99,8 +102,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
 
       // ── Auth screens (full-screen, no shell) ─────────────────────────────
-      GoRoute(path: Routes.landing,   builder: (_, __) => const LandingScreen()),
-      GoRoute(path: Routes.magicLink, builder: (_, __) => const MagicLinkScreen()),
+      GoRoute(path: Routes.landing, builder: (_, __) => const LandingScreen()),
+      GoRoute(
+          path: Routes.magicLink, builder: (_, __) => const MagicLinkScreen()),
 
       GoRoute(
         path: '/auth/callback/:provider',
@@ -213,11 +217,13 @@ class PlaceholderScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 48, color: Theme.of(context).colorScheme.secondary),
+              Icon(icon,
+                  size: 48, color: Theme.of(context).colorScheme.secondary),
               const SizedBox(height: 16),
               Text(label, style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 8),
-              Text('Coming soon', style: Theme.of(context).textTheme.bodyMedium),
+              Text('Coming soon',
+                  style: Theme.of(context).textTheme.bodyMedium),
             ],
           ),
         ),

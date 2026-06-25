@@ -21,7 +21,8 @@ class OAuthCallbackScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<OAuthCallbackScreen> createState() => _OAuthCallbackScreenState();
+  ConsumerState<OAuthCallbackScreen> createState() =>
+      _OAuthCallbackScreenState();
 }
 
 class _OAuthCallbackScreenState extends ConsumerState<OAuthCallbackScreen> {
@@ -109,7 +110,11 @@ class _OAuthCallbackScreenState extends ConsumerState<OAuthCallbackScreen> {
           ),
           child: const Icon(Icons.lock_open_rounded,
               color: PremiumTheme.accent, size: 40),
-        ).animate().scale(begin: const Offset(0.95, 0.95), end: const Offset(1.05, 1.05)).fadeIn(),
+        )
+            .animate()
+            .scale(
+                begin: const Offset(0.95, 0.95), end: const Offset(1.05, 1.05))
+            .fadeIn(),
         const SizedBox(height: 32),
         Text('Finishing sign-in…',
             style: PremiumTheme.headline2(PremiumTheme.textPrimary)),

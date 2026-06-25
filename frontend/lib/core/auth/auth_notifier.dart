@@ -80,7 +80,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       state = AuthStateMagicLinkSent(email: email);
     } on DioException catch (e) {
-      state = AuthStateError(message: _extractError(e, 'Failed to send magic link'));
+      state = AuthStateError(
+          message: _extractError(e, 'Failed to send magic link'));
     }
   }
 
@@ -91,7 +92,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (state is AuthStateAuthenticated) return; // Already logged in
     if (_verifyingToken == token) return; // Prevent double verification
     _verifyingToken = token;
-    
+
     state = const AuthStateLoading();
     try {
       final res = await _client.dio.post(
@@ -102,7 +103,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // Do NOT clear _verifyingToken on success to prevent remount race conditions
     } on DioException catch (e) {
       _verifyingToken = null;
-      state = AuthStateError(message: _extractError(e, 'Invalid or expired magic link'));
+      state = AuthStateError(
+          message: _extractError(e, 'Invalid or expired magic link'));
     }
   }
 
@@ -152,7 +154,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
       if (returnedState != expectedState) {
-        state = const AuthStateError(message: 'OAuth state mismatch — possible CSRF');
+        state = const AuthStateError(
+            message: 'OAuth state mismatch — possible CSRF');
         return;
       }
 
@@ -179,7 +182,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String stateParam,
   }) async {
     if (code.isEmpty || stateParam.isEmpty) {
-      state = const AuthStateError(message: 'OAuth callback is missing code or state');
+      state = const AuthStateError(
+          message: 'OAuth callback is missing code or state');
       return;
     }
 
@@ -198,13 +202,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-
-
   // ── Logout ───────────────────────────────────────────────────────────────────
 
   Future<void> logout() async {
     try {
-      final refreshToken = await _storage.read(key: AppConstants.refreshTokenKey);
+      final refreshToken =
+          await _storage.read(key: AppConstants.refreshTokenKey);
       if (refreshToken != null) {
         await _client.dio.post(
           '/auth/token/revoke',
@@ -225,7 +228,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
-  
+
   void resetState() {
     state = const AuthStateUnauthenticated();
   }
@@ -243,9 +246,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _client.setToken(accessToken);
     await _storage.write(key: AppConstants.accessTokenKey, value: accessToken);
     if (refreshToken != null) {
-      await _storage.write(key: AppConstants.refreshTokenKey, value: refreshToken);
+      await _storage.write(
+          key: AppConstants.refreshTokenKey, value: refreshToken);
     }
-    await _storage.write(key: AppConstants.userKey, value: jsonEncode(user.toJson()));
+    await _storage.write(
+        key: AppConstants.userKey, value: jsonEncode(user.toJson()));
     state = AuthStateAuthenticated(token: accessToken, user: user);
   }
 
