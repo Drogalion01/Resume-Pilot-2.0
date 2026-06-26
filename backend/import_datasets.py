@@ -58,7 +58,7 @@ async def embed_texts_gemini(texts: List[str], api_key: str) -> List[List[float]
             try:
                 logger.info(f"Generating embeddings for batch {i//batch_size + 1}/{(len(texts)-1)//batch_size + 1} (Attempt {retries+1})...")
                 response = client.models.embed_content(
-                    model="gemini-embedding-2",
+                    model="models/gemini-embedding-001",
                     contents=batch
                 )
                 
@@ -85,8 +85,8 @@ async def embed_texts_gemini(texts: List[str], api_key: str) -> List[List[float]
             for _ in batch:
                 embeddings.append([0.0] * 3072)
                 
-        # Proactive rate limiting: Free tier has 15 RPM limit (~1 request every 4 seconds)
-        await asyncio.sleep(4.5)
+        # Proactive rate limiting: Free tier has 15 RPM limit. 7s gap keeps us safely under.
+        await asyncio.sleep(7)
         
     return embeddings
 
@@ -178,7 +178,7 @@ async def main():
     # 3. Generate embeddings
     texts_to_embed = [rec["raw_text"] for rec in all_records]
     if api_key:
-        logger.info(f"Generating embeddings using Gemini model gemini-embedding-2...")
+        logger.info(f"Generating embeddings using Gemini model models/gemini-embedding-001...")
         embeddings = await embed_texts_gemini(texts_to_embed, api_key)
     else:
         logger.info("Using placeholder zero-vector embeddings (3072 dimensions)...")
