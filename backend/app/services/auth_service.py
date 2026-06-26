@@ -95,6 +95,9 @@ async def send_magic_link(email: str, ip_address: str, db: AsyncSession) -> None
         )
         db.add(user)
         await db.flush()
+        # Create UserSettings for new magic-link user (matches OAuth upsert behavior)
+        db.add(UserSettings(id=uuid.uuid4(), user_id=user.id))
+        await db.flush()
 
     # Create token
     raw_token = secrets.token_urlsafe(32)
@@ -260,16 +263,16 @@ async def get_oauth_userinfo(provider: str, access_token: str) -> dict:
             )
         data = resp.json()
         sub = data.get("sub") or data.get("id")
-        email_data = data.get("email", {})
-        email = email_data.get("email_address") if isinstance(email_data, dict) else None
+        # LinkedIn OpenID Connect /v2/userinfo returns 'email' as a plain top-level string
+        email = data.get("email")
         if not email:
-            raise AuthenticationError("LinkedIn email not accessible")
+            raise AuthenticationError("LinkedIn email not accessible — ensure 'email' scope is granted")
         return {
-            "provider_user_id": sub,
+            "provider_user_id": str(sub),
             "email": email.lower(),
             "full_name": data.get("name"),
-            "avatar_url": None,
-            "email_verified": False,
+            "avatar_url": data.get("picture"),
+            "email_verified": data.get("email_verified", False),
         }
     else:
         raise ValueError(f"Unsupported provider: {provider}")

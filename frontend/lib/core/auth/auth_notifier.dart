@@ -9,6 +9,7 @@
 //   • Session     — restores on cold start, silent refresh via Dio interceptor
 //   • Logout      — revokes refresh token + clears secure storage
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -17,6 +18,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:url_launcher/url_launcher.dart';
+// Conditional web import — only available in browser
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 import '../constants/app_constants.dart';
 import '../models/user_model.dart';
@@ -135,10 +139,48 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final expectedState = data['state'] as String;
 
       if (kIsWeb) {
+        // Open OAuth in a popup so the app state is preserved in the main tab.
+        // auth.html on the callback URL posts the result via BroadcastChannel.
+        final callbackUrl = '${Uri.base.origin}/auth/callback/$provider';
+        final popupUrl = authUrl;
+
+        // Open popup window
         await launchUrl(
-          Uri.parse(authUrl),
-          webOnlyWindowName: '_self',
+          Uri.parse(popupUrl),
+          webOnlyWindowName: '_blank',
         );
+
+        // Listen for the callback message via BroadcastChannel
+        state = AuthStateLoading();
+        try {
+          // Poll for BroadcastChannel message using dart:html
+          // ignore: avoid_web_libraries_in_flutter
+          final result = await _waitForOAuthPopupResult(provider);
+          if (result == null) {
+            state = const AuthStateError(message: 'OAuth popup was closed without completing sign-in');
+            return;
+          }
+          final uri = Uri.parse(result);
+          final code = uri.queryParameters['code'];
+          final returnedState = uri.queryParameters['state'];
+          if (code == null || code.isEmpty) {
+            state = const AuthStateError(message: 'OAuth cancelled or failed');
+            return;
+          }
+          final callbackRes = await _client.dio.post(
+            '/auth/oauth/$provider/callback',
+            data: {
+              'code': code,
+              'state': returnedState ?? '',
+              'redirect_uri': callbackUrl,
+            },
+          );
+          _handleAuthResponse(callbackRes.data as Map<String, dynamic>);
+        } on DioException catch (e) {
+          state = AuthStateError(message: _extractError(e, 'OAuth sign-in failed'));
+        } catch (e) {
+          state = AuthStateError(message: 'OAuth sign-in failed: $e');
+        }
         return;
       }
 
@@ -270,5 +312,43 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (body is Map) return body['detail'] as String? ?? fallback;
     } catch (_) {}
     return fallback;
+  }
+
+  /// Waits for the OAuth popup to post its result via BroadcastChannel.
+  /// Returns the full callback URL string, or null on timeout/error.
+  Future<String?> _waitForOAuthPopupResult(String provider) async {
+    if (!kIsWeb) return null;
+    final completer = Completer<String?>();
+    html.BroadcastChannel? channel;
+    Timer? timer;
+    try {
+      channel = html.BroadcastChannel('flutter-web-auth-2');
+      channel.onMessage.listen((event) {
+        if (completer.isCompleted) return;
+        try {
+          final data = event.data;
+          String? url;
+          if (data is Map) {
+            url = (data['flutter-web-auth-2'] as String?) ??
+                (data['url'] as String?);
+          } else if (data is String) {
+            url = data;
+          }
+          if (url != null && url.contains('/auth/callback/$provider')) {
+            completer.complete(url);
+          }
+        } catch (_) {}
+      });
+      // 5-minute timeout
+      timer = Timer(const Duration(minutes: 5), () {
+        if (!completer.isCompleted) completer.complete(null);
+      });
+      return await completer.future;
+    } catch (e) {
+      return null;
+    } finally {
+      timer?.cancel();
+      channel?.close();
+    }
   }
 }
