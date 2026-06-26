@@ -42,8 +42,30 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Generate a fallback symmetric secret for the lifetime of this server process
-_FALLBACK_SECRET = os.environ.get("JWT_SECRET_KEY") or secrets.token_hex(32)
+# Load the stable HS256 fallback secret from settings (reads Vercel env vars correctly).
+# Falls back to a per-process random only in development where JWT_SECRET_KEY is unset.
+# IMPORTANT: Set JWT_SECRET_KEY in Vercel env vars to avoid token invalidation on cold-starts.
+def _load_fallback_secret() -> str:
+    # Try settings first (goes through pydantic-settings / dotenv)
+    try:
+        from app.config import settings as _s
+        if _s.JWT_SECRET_KEY:
+            return _s.JWT_SECRET_KEY
+    except Exception:
+        pass
+    # Raw env var as second fallback
+    raw = os.environ.get("JWT_SECRET_KEY")
+    if raw:
+        return raw
+    # Dev-only: random ephemeral secret (will break between Vercel instances — set JWT_SECRET_KEY!)
+    logger.warning(
+        "JWT_SECRET_KEY is not set! Using a random per-process HS256 secret. "
+        "All tokens will be invalidated on every server cold-start. "
+        "Set JWT_SECRET_KEY in your Vercel environment variables."
+    )
+    return secrets.token_hex(32)
+
+_FALLBACK_SECRET = _load_fallback_secret()
 
 
 def create_access_token(

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # ── JWT (RS256 asymmetric) ─────────────────────────────────────────────────
     JWT_PRIVATE_KEY: str = ""  # PEM format, include -----BEGIN RSA PRIVATE KEY-----
     JWT_PUBLIC_KEY: str = ""   # PEM format, include -----BEGIN PUBLIC KEY-----
+    JWT_SECRET_KEY: str = ""   # Stable HS256 fallback secret — MUST be set in prod Vercel env vars
     JWT_ALGORITHM: str = "RS256"
     JWT_ACCESS_EXPIRE_MINUTES: int = 60          # 1 hour
     JWT_REFRESH_EXPIRE_DAYS: int = 30
