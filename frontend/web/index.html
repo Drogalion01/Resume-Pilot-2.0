@@ -18,21 +18,25 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Resume Pilot — Land your dream job with AI">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="resume_pilot">
+  <meta name="apple-mobile-web-app-title" content="Resume Pilot">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>resume_pilot</title>
+  <title>Resume Pilot</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- ── Paddle.js v2 ─────────────────────────────────────────────────── -->
+  <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+
   <script>
-    // Listen for flutter-web-auth-2 BroadcastChannel fallback (when opener is null)
+    // ── OAuth BroadcastChannel relay ─────────────────────────────────────
     try {
       const bc = new BroadcastChannel('flutter-web-auth-2');
       bc.onmessage = (event) => {
@@ -41,6 +45,51 @@
     } catch (e) {
       console.warn("BroadcastChannel not supported", e);
     }
+
+    // ── Paddle.js initialization bridge ──────────────────────────────────
+    // Called from Dart via js_interop after fetching the client token
+    // from GET /api/v1/subscriptions/config
+    window._paddleInitialized = false;
+
+    window.initPaddle = function(clientToken, environment) {
+      try {
+        Paddle.Initialize({
+          token: clientToken,
+          environment: environment || 'sandbox',
+          eventCallback: function(data) {
+            // Relay Paddle events to Flutter via window.postMessage
+            window.postMessage({ type: 'paddle_event', event: data.name, data: data.data }, '*');
+          }
+        });
+        window._paddleInitialized = true;
+        console.log('[Paddle] Initialized in', environment, 'mode');
+      } catch(e) {
+        console.error('[Paddle] Initialization failed:', e);
+      }
+    };
+
+    // Opens the Paddle checkout overlay using a transaction ID
+    window.openPaddleCheckout = function(transactionId) {
+      if (!window._paddleInitialized) {
+        console.error('[Paddle] Not initialized yet');
+        return;
+      }
+      Paddle.Checkout.open({
+        transactionId: transactionId,
+      });
+    };
+
+    // Opens the Paddle checkout overlay using a price ID directly (no backend call)
+    window.openPaddleCheckoutByPriceId = function(priceId, userEmail) {
+      if (!window._paddleInitialized) {
+        console.error('[Paddle] Not initialized yet');
+        return;
+      }
+      Paddle.Checkout.open({
+        items: [{ priceId: priceId, quantity: 1 }],
+        customer: userEmail ? { email: userEmail } : undefined,
+      });
+    };
   </script>
 </head>
 <body>
@@ -55,3 +104,4 @@
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
+

@@ -11,6 +11,7 @@ import '../../../core/auth/auth_notifier.dart';
 import '../../../core/auth/auth_state.dart';
 import '../../../shared/providers/theme_provider.dart';
 import '../providers/session_provider.dart';
+import '../providers/subscription_provider.dart';
 import 'package:intl/intl.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -21,6 +22,9 @@ class SettingsScreen extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final authState = ref.watch(authNotifierProvider);
     final user = authState is AuthStateAuthenticated ? authState.user : null;
+
+    // Initialize Paddle.js on page load
+    ref.watch(paddleInitProvider);
 
     return Scaffold(
       backgroundColor: PremiumTheme.darkBg,
@@ -62,15 +66,11 @@ class SettingsScreen extends ConsumerWidget {
           _SettingsTile(
             icon: Icons.workspace_premium_rounded,
             title: user?.isPro == true ? 'Manage Pro Subscription' : 'Upgrade to Pro',
-            subtitle: user?.isPro == true ? 'Active until end of billing cycle' : 'Unlock unlimited AI generations',
+            subtitle: user?.isPro == true
+                ? 'Active until end of billing cycle'
+                : 'Unlock unlimited AI generations',
             iconColor: PremiumTheme.accent,
-            onTap: () async {
-              // Paddle checkout link or customer portal link
-              final url = Uri.parse('https://buy.paddle.com/checkout');
-              if (await canLaunchUrl(url)) {
-                await launchUrl(url, mode: LaunchMode.externalApplication);
-              }
-            },
+            onTap: () => _showUpgradeSheet(context, ref, userEmail: user?.email),
           ).animate(delay: 125.ms).fadeIn(),
 
           const SizedBox(height: 24),
@@ -212,6 +212,16 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _showUpgradeSheet(BuildContext context, WidgetRef ref,
+      {String? userEmail}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _UpgradeSheet(userEmail: userEmail),
     );
   }
 
@@ -404,3 +414,266 @@ extension StringExtension on String {
   String capitalize() =>
       isEmpty ? this : '${this[0].toUpperCase()}${substring(1)}';
 }
+
+// ── Upgrade / Pricing Sheet ───────────────────────────────────────────────────
+
+class _UpgradeSheet extends ConsumerStatefulWidget {
+  final String? userEmail;
+  const _UpgradeSheet({this.userEmail});
+
+  @override
+  ConsumerState<_UpgradeSheet> createState() => _UpgradeSheetState();
+}
+
+class _UpgradeSheetState extends ConsumerState<_UpgradeSheet> {
+  String? _selectedPriceId;
+
+  @override
+  Widget build(BuildContext context) {
+    final plansAsync = ref.watch(subscriptionPlansProvider);
+    final checkoutState = ref.watch(checkoutProvider(widget.userEmail));
+    final checkoutNotifier = ref.read(checkoutProvider(widget.userEmail).notifier);
+
+    // Dismiss on checkout success
+    if (checkoutState.status == CheckoutStatus.success) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) Navigator.pop(context);
+      });
+    }
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: PremiumTheme.bgPrimary,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        24, 16, 24, MediaQuery.of(context).viewInsets.bottom + 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: PremiumTheme.darkBorder,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Header
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: PremiumTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.workspace_premium_rounded,
+                  color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Upgrade to Pro',
+                      style: PremiumTheme.headline3(PremiumTheme.textPrimary)),
+                  Text('Unlock unlimited AI-powered resume tailoring',
+                      style: PremiumTheme.bodySmall(PremiumTheme.textSecondary)),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close_rounded,
+                  color: PremiumTheme.textSecondary, size: 20),
+            ),
+          ]),
+          const SizedBox(height: 24),
+
+          // Plans
+          plansAsync.when(
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+            error: (e, _) => Center(
+              child: Text('Failed to load plans: $e',
+                  style: PremiumTheme.bodySmall(PremiumTheme.error)),
+            ),
+            data: (plans) => Column(
+              children: plans.map((plan) {
+                final isSelected = _selectedPriceId == plan.priceId;
+                final isYearly = plan.interval == 'year';
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedPriceId = plan.priceId),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? PremiumTheme.primary.withOpacity(0.12)
+                          : PremiumTheme.darkCard,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected
+                            ? PremiumTheme.accent
+                            : PremiumTheme.darkBorder,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(children: [
+                      // Radio
+                      Container(
+                        width: 20, height: 20,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected
+                                ? PremiumTheme.accent
+                                : PremiumTheme.darkBorder,
+                            width: 2,
+                          ),
+                          color: isSelected
+                              ? PremiumTheme.accent
+                              : Colors.transparent,
+                        ),
+                        child: isSelected
+                            ? const Icon(Icons.check, size: 12, color: Colors.white)
+                            : null,
+                      ),
+                      const SizedBox(width: 14),
+
+                      // Plan details
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Text(plan.name,
+                                  style: PremiumTheme.body(PremiumTheme.textPrimary)
+                                      .copyWith(fontWeight: FontWeight.w600)),
+                              if (isYearly) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: PremiumTheme.success.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text('Save 25%',
+                                      style: PremiumTheme.caption(
+                                          PremiumTheme.success)
+                                          .copyWith(fontWeight: FontWeight.w700)),
+                                ),
+                              ],
+                            ]),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 8,
+                              children: plan.features
+                                  .take(3)
+                                  .map((f) => Text('✓ $f',
+                                      style: PremiumTheme.caption(
+                                          PremiumTheme.textSecondary)))
+                                  .toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Price
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('\$${plan.price.toStringAsFixed(2)}',
+                              style: PremiumTheme.headline3(PremiumTheme.textPrimary)),
+                          Text(plan.intervalLabel,
+                              style: PremiumTheme.caption(PremiumTheme.textSecondary)),
+                        ],
+                      ),
+                    ]),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // Error banner
+          if (checkoutState.status == CheckoutStatus.error &&
+              checkoutState.error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: PremiumTheme.error.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: PremiumTheme.error.withOpacity(0.3)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.error_outline_rounded,
+                      color: PremiumTheme.error, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(checkoutState.error!,
+                        style: PremiumTheme.bodySmall(PremiumTheme.error)),
+                  ),
+                ]),
+              ),
+            ),
+
+          // CTA button
+          SizedBox(
+            height: 52,
+            child: ElevatedButton(
+              onPressed: (_selectedPriceId == null ||
+                      checkoutState.status == CheckoutStatus.loading)
+                  ? null
+                  : () async {
+                      await checkoutNotifier.openCheckout(_selectedPriceId!);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: PremiumTheme.primary,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              child: checkoutState.status == CheckoutStatus.loading
+                  ? const SizedBox(
+                      width: 20, height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(
+                      _selectedPriceId == null
+                          ? 'Select a plan'
+                          : 'Continue to Checkout',
+                      style: PremiumTheme.body(Colors.white)
+                          .copyWith(fontWeight: FontWeight.w600),
+                    ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              '🔒 Secure checkout powered by Paddle',
+              style: PremiumTheme.caption(PremiumTheme.textMuted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

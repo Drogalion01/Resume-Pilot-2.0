@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # ── Paddle (Monetization) ───────────────────────────────────────────────────
     PADDLE_API_KEY: str = ""
     PADDLE_WEBHOOK_SECRET: str = ""
+    PADDLE_CLIENT_TOKEN: str = ""      # Public client-side token for Paddle.js overlay
     PADDLE_MONTHLY_PRICE_ID: str = "pri_monthly_mock"
     PADDLE_YEARLY_PRICE_ID: str = "pri_yearly_mock"
     PADDLE_LIFETIME_PRICE_ID: str = "pri_lifetime_mock"

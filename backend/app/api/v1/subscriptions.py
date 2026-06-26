@@ -60,6 +60,18 @@ async def get_plans():
     return {"plans": PLANS}
 
 
+@router.get("/config")
+async def get_paddle_config():
+    """
+    Return the public Paddle client-side token and environment.
+    Safe to call without auth — PADDLE_CLIENT_TOKEN is NOT a secret key.
+    """
+    return {
+        "client_token": settings.PADDLE_CLIENT_TOKEN,
+        "environment": "sandbox" if settings.ENVIRONMENT != "production" else "production",
+    }
+
+
 class CheckoutRequest(BaseModel):
     price_id: str
     success_url: Optional[str] = None
@@ -120,11 +132,17 @@ async def create_checkout(
             raise HTTPException(status_code=502, detail="Failed to create Paddle checkout session")
 
         data = resp.json()
-        checkout_url = data.get("data", {}).get("checkout", {}).get("url")
+        paddle_data = data.get("data", {})
+        checkout_url = paddle_data.get("checkout", {}).get("url")
+        transaction_id = paddle_data.get("id")
         if not checkout_url:
             raise HTTPException(status_code=502, detail="Paddle did not return a checkout URL")
 
-        return {"checkout_url": checkout_url, "mode": "paddle"}
+        return {
+            "checkout_url": checkout_url,
+            "transaction_id": transaction_id,
+            "mode": "paddle",
+        }
 
     except HTTPException:
         raise
