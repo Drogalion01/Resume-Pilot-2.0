@@ -156,7 +156,7 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
     }
 
     try {
-      // If Paddle.js is initialized, use direct price-ID checkout (no backend call needed)
+      // Path A: Paddle.js is initialized → open overlay directly by price ID
       if (PaddleService.instance.isInitialized) {
         PaddleService.instance.openCheckoutByPriceId(
           priceId,
@@ -166,27 +166,31 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
         return;
       }
 
-      // Fallback: backend creates transaction → use transaction ID
+      // Path B: Paddle.js not yet ready → create backend transaction and use URL
+      // This handles the race condition where the /config call hasn't resolved yet
       final result = await _repo.createCheckout(priceId);
       final transactionId = result['transaction_id'] as String?;
+      final checkoutUrl = result['checkout_url'] as String?;
 
-      if (transactionId != null &&
-          PaddleService.instance.isInitialized) {
+      // If Paddle.js initialized by now (async), use overlay
+      if (transactionId != null && PaddleService.instance.isInitialized) {
         PaddleService.instance.openCheckoutByTransactionId(transactionId);
         state = state.copyWith(status: CheckoutStatus.success);
-      } else {
-        // Last resort: open checkout URL in browser
-        final checkoutUrl = result['checkout_url'] as String?;
-        if (checkoutUrl != null) {
-          if (kIsWeb) html.window.open(checkoutUrl, '_blank');
-          state = state.copyWith(status: CheckoutStatus.success);
-        } else {
-          throw Exception('No checkout URL or transaction ID returned');
-        }
+        return;
       }
+
+      // Path C: Open checkout URL in new tab as final fallback
+      if (checkoutUrl != null) {
+        if (kIsWeb) html.window.open(checkoutUrl, '_blank');
+        state = state.copyWith(status: CheckoutStatus.success);
+        return;
+      }
+
+      throw Exception('Checkout unavailable. Please try again.');
     } on DioException catch (e) {
-      final msg = (e.error as dynamic)?.message as String? ??
-          'Checkout failed. Please try again.';
+      final msg = (e.error is ApiException)
+          ? (e.error as ApiException).message
+          : 'Checkout failed. Please try again.';
       state = state.copyWith(status: CheckoutStatus.error, error: msg);
     } catch (e) {
       state = state.copyWith(

@@ -79,14 +79,13 @@ def send_verification_email(
 def send_magic_link(to_email: str, raw_token: str) -> bool:
     """
     Send passwordless magic link sign-in email.
-    The primary link opens the mobile app via deep link, with a browser fallback.
+    Primary CTA: opens the web app verify page which itself handles deep-link redirect.
+    The verify page automatically tries to open resumepilot:// scheme and falls back to web.
     """
+    # Web app verify page — handles deep link redirect logic in the browser
     verify_url = f"{settings.APP_WEB_BASE_URL}/auth/verify?token={raw_token}"
-    app_link = (
-        f"intent://app/auth/verify?token={raw_token}"
-        f"#Intent;scheme=resumepilot;package=com.resumepilot.resume_pilot;"
-        f"S.browser_fallback_url={quote(verify_url, safe='')};end"
-    )
+    # Direct deep link for users who have the app installed (works on iOS + Android)
+    deep_link = f"resumepilot://app/auth/verify?token={raw_token}"
     name = to_email.split("@")[0]
 
     html = f"""
@@ -96,17 +95,25 @@ def send_magic_link(to_email: str, raw_token: str) -> bool:
       <div style="max-width: 520px; margin: 0 auto; background: #1a1a2e; border-radius: 16px; padding: 40px; border: 1px solid #7c3aed22;">
         <h1 style="color: #a78bfa; margin-bottom: 8px;">Sign in to ResumePilot 🔐</h1>
         <p style="color: #94a3b8;">Hi {name}, click the button below to sign in to your account.</p>
-        <a href="{app_link}"
+        <p style="color: #cbd5e1; margin-top: 4px; font-size: 14px;">
+          If you have the mobile app installed, it will open automatically. Otherwise the web app will open.
+        </p>
+
+        <!-- Primary CTA — opens web app verify page which triggers deep link -->
+        <a href="{verify_url}"
            style="display:inline-block; margin-top:24px; padding:14px 32px;
                   background:linear-gradient(135deg,#7c3aed,#4f46e5);
                   color:#fff; border-radius:10px; text-decoration:none;
                   font-weight:600; font-size:16px;">
-          Open in app
+          Sign In ✨
         </a>
-        <p style="margin-top:18px; color:#94a3b8; font-size:14px;">
-          If the app does not open, use this browser link:
-          <a href="{verify_url}" style="color:#a78bfa; text-decoration:none;">Sign in on the web</a>
+
+        <!-- Secondary: direct mobile app deep link -->
+        <p style="margin-top:20px; color:#94a3b8; font-size:14px;">
+          Have the mobile app? &nbsp;
+          <a href="{deep_link}" style="color:#a78bfa; text-decoration:none; font-weight:600;">Open in mobile app →</a>
         </p>
+
         <p style="margin-top:32px; color:#64748b; font-size:13px;">
           This link expires in 15 minutes and can be used only once. If you didn't request this, ignore this email.
         </p>
@@ -121,6 +128,7 @@ def send_magic_link(to_email: str, raw_token: str) -> bool:
         "subject": "Your ResumePilot sign-in link",
         "html": html,
     })
+
 
 
 def send_password_reset_email(to_email: str, token: str) -> bool:

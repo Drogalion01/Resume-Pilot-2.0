@@ -66,24 +66,28 @@ async def generate_tailored_resume_endpoint(
                 detail="Pro tier monthly limit reached."
             )
 
-    # Retrieve RAG context (past resumes and cover letters)
+    # Retrieve RAG context (past resumes and cover letters) — non-critical, safe to skip on failure
     from app.services.rag_service import rag_service
-    relevant_resumes = await rag_service.retrieve_relevant_resumes(
-        user_id=current_user.id,
-        job_title=body.job_title,
-        job_description=body.job_description,
-        db=db,
-        limit=2,
-    )
+    relevant_resumes = []
     relevant_cover_letters = []
-    if body.generate_cover_letter:
-        relevant_cover_letters = await rag_service.retrieve_relevant_cover_letters(
+    try:
+        relevant_resumes = await rag_service.retrieve_relevant_resumes(
             user_id=current_user.id,
             job_title=body.job_title,
             job_description=body.job_description,
             db=db,
             limit=2,
         )
+        if body.generate_cover_letter:
+            relevant_cover_letters = await rag_service.retrieve_relevant_cover_letters(
+                user_id=current_user.id,
+                job_title=body.job_title,
+                job_description=body.job_description,
+                db=db,
+                limit=2,
+            )
+    except Exception as rag_exc:
+        logger.warning("RAG retrieval failed (non-fatal, continuing without context): %s", rag_exc)
 
     try:
         tailored_resume, cover_letter_text = await llm_service.generate_resume_and_cover_letter(
@@ -97,7 +101,20 @@ async def generate_tailored_resume_endpoint(
             relevant_cover_letters=relevant_cover_letters,
         )
     except llm_service.LLMServiceError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        # LLM failed completely — return a fallback mock so the user still gets something
+        logger.error("LLMServiceError in generation: %s — returning mock", exc)
+        from app.services.resume_service import analyze_resume
+        det_scores = analyze_resume(resume.raw_text or "")
+        tailored_resume = llm_service._mock_tailored_resume(body.job_title, body.company_name)
+        tailored_resume["scoring"] = {
+            "ats_score": det_scores["ats_score"],
+            "recruiter_score": det_scores["recruiter_score"],
+            "overall_score": det_scores["overall_score"],
+            "matched_keywords": det_scores.get("matched_keywords", []),
+            "missing_keywords": det_scores.get("missing_keywords", []),
+            "score_reasoning": "AI service temporarily unavailable. Scores computed using deterministic ATS analysis.",
+        }
+        cover_letter_text = llm_service._mock_cover_letter(body.job_title, body.company_name or "", current_user.full_name) if body.generate_cover_letter else None
 
     scoring = tailored_resume.get("scoring", {})
     
