@@ -4,6 +4,7 @@ from typing import List, Optional
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -279,6 +280,91 @@ async def delete_cover_letter(
     await db.delete(cl)
     await db.commit()
     return MessageResponse(message="Cover letter deleted")
+
+
+# ── PDF Download endpoints ─────────────────────────────────────────────────────
+
+@router.get("/resume-versions/{version_id}/download-pdf")
+async def download_resume_pdf(
+    version_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate and stream a PDF for a tailored resume version.
+    The PDF is built on-the-fly from the stored content_json — no S3 storage needed.
+    """
+    version = await db.get(ResumeVersion, version_id)
+    if not version or version.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Resume version not found")
+
+    if not version.content_json:
+        raise HTTPException(status_code=422, detail="Resume version has no content to export")
+
+    try:
+        from app.services.pdf_service import generate_resume_pdf
+        pdf_bytes = generate_resume_pdf(
+            resume_json=version.content_json,
+            job_title=version.job_title or "",
+            company=version.company_name or "",
+        )
+    except Exception as exc:
+        logger.exception("PDF generation failed for version %s", version_id)
+        raise HTTPException(status_code=500, detail="PDF generation failed")
+
+    safe_title = (version.title or "resume").replace(" ", "_").replace("/", "-")[:60]
+    filename = f"{safe_title}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(pdf_bytes)),
+        },
+    )
+
+
+@router.get("/cover-letters/{id}/download-pdf")
+async def download_cover_letter_pdf(
+    id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate and stream a PDF for a cover letter.
+    """
+    cl = await db.get(CoverLetter, id)
+    if not cl or cl.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Cover letter not found")
+
+    if not cl.content:
+        raise HTTPException(status_code=422, detail="Cover letter has no content to export")
+
+    try:
+        from app.services.pdf_service import generate_cover_letter_pdf
+        pdf_bytes = generate_cover_letter_pdf(
+            cover_letter_text=cl.content,
+            candidate_name=current_user.full_name or "",
+            job_title=cl.job_title or "",
+            company_name=cl.company_name or "",
+        )
+    except Exception as exc:
+        logger.exception("Cover letter PDF generation failed for %s", id)
+        raise HTTPException(status_code=500, detail="PDF generation failed")
+
+    safe_title = (f"cover_letter_{cl.job_title or 'letter'}").replace(" ", "_")[:60]
+    filename = f"{safe_title}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(pdf_bytes)),
+        },
+    )
+
 
 @router.post("/applications/{app_id}/generate-post", response_model=MessageResponse)
 async def generate_social_post(
