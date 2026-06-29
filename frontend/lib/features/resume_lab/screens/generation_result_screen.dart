@@ -13,7 +13,7 @@ class GenerationResultScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final generationValue = ref.watch(generationProvider).valueOrNull;
-    final downloadStatus = ref.watch(pdfDownloadProvider);
+    final downloadState = ref.watch(pdfDownloadProvider);
 
     if (generationValue == null) {
       return Scaffold(
@@ -23,11 +23,11 @@ class GenerationResultScreen extends ConsumerWidget {
     }
 
     final result = generationValue;
-    final isDownloading = downloadStatus == DownloadStatus.loading;
+    final isDownloading = downloadState.status == DownloadStatus.loading;
 
     // Show snack when download completes or errors
     ref.listen(pdfDownloadProvider, (prev, next) {
-      if (next == DownloadStatus.done) {
+      if (next.status == DownloadStatus.done) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('PDF downloaded successfully ✓'),
@@ -35,10 +35,10 @@ class GenerationResultScreen extends ConsumerWidget {
           ),
         );
         ref.read(pdfDownloadProvider.notifier).reset();
-      } else if (next == DownloadStatus.error) {
+      } else if (next.status == DownloadStatus.error) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('PDF download failed. Please try again.'),
+          SnackBar(
+            content: Text(next.errorMessage ?? 'PDF download failed. Please try again.'),
             backgroundColor: PremiumTheme.error,
           ),
         );

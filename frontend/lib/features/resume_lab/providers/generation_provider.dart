@@ -1,12 +1,10 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html show AnchorElement, Url, Blob;
 import 'dart:typed_data';
 
 import '../../../core/models/generation_model.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/services/pdf_download_service.dart';
 
 class GenerationRepository {
   final Dio _dio;
@@ -126,56 +124,66 @@ final generationProvider =
 
 // ── PDF download helper ───────────────────────────────────────────────────────
 
-/// Triggers a web browser download from [bytes] with [filename].
-/// No-op on non-web platforms (caller should use path_provider there).
-void downloadBytesOnWeb(Uint8List bytes, String filename) {
-  if (!kIsWeb) return;
-  final blob = html.Blob([bytes], 'application/pdf');
-  final url = html.Url.createObjectUrlFromBlob(blob);
-  final anchor = html.AnchorElement(href: url)
-    ..setAttribute('download', filename)
-    ..click();
-  html.Url.revokeObjectUrl(url);
-}
-
-/// Download state notifier for resume PDF
 enum DownloadStatus { idle, loading, done, error }
 
-class PdfDownloadNotifier extends StateNotifier<DownloadStatus> {
+class PdfDownloadState {
+  final DownloadStatus status;
+  final String? errorMessage;
+  const PdfDownloadState({this.status = DownloadStatus.idle, this.errorMessage});
+
+  PdfDownloadState copyWith({DownloadStatus? status, String? errorMessage}) =>
+      PdfDownloadState(
+        status: status ?? this.status,
+        errorMessage: errorMessage ?? this.errorMessage,
+      );
+}
+
+class PdfDownloadNotifier extends StateNotifier<PdfDownloadState> {
   final GenerationRepository _repo;
-  PdfDownloadNotifier(this._repo) : super(DownloadStatus.idle);
+  PdfDownloadNotifier(this._repo) : super(const PdfDownloadState());
 
   Future<void> downloadResume(String resumeVersionId, String filename) async {
-    state = DownloadStatus.loading;
+    state = state.copyWith(status: DownloadStatus.loading);
     try {
       final bytes = await _repo.downloadResumePdf(resumeVersionId);
-      if (kIsWeb) {
-        downloadBytesOnWeb(bytes, filename);
-      }
-      // TODO: on mobile, save with path_provider + open_file
-      state = DownloadStatus.done;
+      await PdfDownloadService.save(bytes, filename);
+      state = state.copyWith(status: DownloadStatus.done);
     } catch (e) {
-      state = DownloadStatus.error;
+      state = state.copyWith(
+        status: DownloadStatus.error,
+        errorMessage: 'Failed to download resume: ${_friendlyError(e)}',
+      );
     }
   }
 
   Future<void> downloadCoverLetter(String coverLetterId, String filename) async {
-    state = DownloadStatus.loading;
+    state = state.copyWith(status: DownloadStatus.loading);
     try {
       final bytes = await _repo.downloadCoverLetterPdf(coverLetterId);
-      if (kIsWeb) {
-        downloadBytesOnWeb(bytes, filename);
-      }
-      state = DownloadStatus.done;
+      await PdfDownloadService.save(bytes, filename);
+      state = state.copyWith(status: DownloadStatus.done);
     } catch (e) {
-      state = DownloadStatus.error;
+      state = state.copyWith(
+        status: DownloadStatus.error,
+        errorMessage: 'Failed to download cover letter: ${_friendlyError(e)}',
+      );
     }
   }
 
-  void reset() => state = DownloadStatus.idle;
+  void reset() => state = const PdfDownloadState();
+
+  String _friendlyError(Object e) {
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 404) return 'File not found on server';
+      if (code == 500) return 'Server error — try again shortly';
+      return 'Network error';
+    }
+    return e.toString();
+  }
 }
 
 final pdfDownloadProvider =
-    StateNotifierProvider<PdfDownloadNotifier, DownloadStatus>((ref) {
+    StateNotifierProvider<PdfDownloadNotifier, PdfDownloadState>((ref) {
   return PdfDownloadNotifier(ref.watch(generationRepositoryProvider));
 });

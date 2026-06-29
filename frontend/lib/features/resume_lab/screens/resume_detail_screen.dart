@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/router/router.dart';
 import '../../../app/theme/premium_theme.dart';
+import '../providers/generation_provider.dart';
 import '../providers/resume_provider.dart';
 import '../../../core/models/resume_model.dart';
 
@@ -153,12 +154,36 @@ class ResumeDetailScreen extends ConsumerWidget {
   }
 }
 
-class _VersionCard extends StatelessWidget {
+class _VersionCard extends ConsumerWidget {
   final ResumeVersion version;
   const _VersionCard({required this.version});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloadState = ref.watch(pdfDownloadProvider);
+    final isDownloading = downloadState.status == DownloadStatus.loading;
+
+    // Snack on completion
+    ref.listen(pdfDownloadProvider, (prev, next) {
+      if (next.status == DownloadStatus.done) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PDF downloaded ✓'),
+            backgroundColor: PremiumTheme.success,
+          ),
+        );
+        ref.read(pdfDownloadProvider.notifier).reset();
+      } else if (next.status == DownloadStatus.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.errorMessage ?? 'Download failed'),
+            backgroundColor: PremiumTheme.error,
+          ),
+        );
+        ref.read(pdfDownloadProvider.notifier).reset();
+      }
+    });
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -178,6 +203,23 @@ class _VersionCard extends StatelessWidget {
                   version.title,
                   style: PremiumTheme.body(PremiumTheme.textPrimary).copyWith(fontWeight: FontWeight.w600),
                 ),
+              ),
+              // PDF download button
+              IconButton(
+                icon: isDownloading
+                    ? const SizedBox(
+                        width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 1.5, color: PremiumTheme.accent),
+                      )
+                    : const Icon(Icons.download_rounded, size: 20, color: PremiumTheme.accent),
+                tooltip: 'Download as PDF',
+                onPressed: isDownloading
+                    ? null
+                    : () {
+                        final filename = '${version.title.replaceAll(" ", "_").replaceAll("/", "-")}.pdf';
+                        ref.read(pdfDownloadProvider.notifier)
+                            .downloadResume(version.id, filename);
+                      },
               ),
             ],
           ),

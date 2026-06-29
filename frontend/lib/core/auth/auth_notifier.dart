@@ -18,14 +18,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:url_launcher/url_launcher.dart';
-// Conditional web import — only available in browser
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
 
 import '../constants/app_constants.dart';
 import '../models/user_model.dart';
 import '../network/api_client.dart';
 import 'auth_state.dart';
+// Conditional import: dart:html is only available on the web platform.
+// On mobile/desktop this resolves to a no-op stub.
+import '../web/html_stub.dart'
+    if (dart.library.html) 'dart:html' as html;
 
 // ── Provider ───────────────────────────────────────────────────────────────────
 

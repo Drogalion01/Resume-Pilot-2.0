@@ -11,21 +11,24 @@
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../router/router.dart';
 import '../theme/premium_theme.dart';
+import '../../features/settings/providers/subscription_provider.dart';
 
-class AppShell extends StatefulWidget {
+class AppShell extends ConsumerStatefulWidget {
   final Widget child;
   const AppShell({super.key, required this.child});
 
   @override
-  State<AppShell> createState() => _AppShellState();
+  ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> {
   static const _tabs = [
     (route: Routes.dashboard,    icon: Icons.grid_view_rounded,     label: 'Home'),
     (route: Routes.applications, icon: Icons.work_outline_rounded,   label: 'Track'),
@@ -41,6 +44,12 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     _appLinks = AppLinks();
     _linkSub = _appLinks.uriLinkStream.listen(_handleIncomingLink);
+    // Initialize Paddle.js early (web only) so checkout is ready before Settings opens
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(paddleInitProvider);
+      });
+    }
   }
 
   @override
