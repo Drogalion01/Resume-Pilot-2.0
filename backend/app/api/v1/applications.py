@@ -19,6 +19,7 @@ from app.schemas.application import (
     ApplicationUpdate,
     NoteCreate,
     NoteOut,
+    TimelineEventOut,
 )
 
 
