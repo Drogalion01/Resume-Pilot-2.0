@@ -212,41 +212,63 @@ async def analyze_resume_endpoint(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Trigger (re)analysis of a resume."""
+    """Trigger (re)analysis of a resume. Always returns a result — RAG is best-effort."""
     resume = await db.get(Resume, resume_id)
     if not resume or resume.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Resume not found")
     if not resume.raw_text:
-        raise HTTPException(status_code=400, detail="Resume has no text content")
+        raise HTTPException(status_code=400, detail="Resume has no text content to analyze")
 
-    analysis_dict = analyze_resume(resume.raw_text)
+    try:
+        analysis_dict = analyze_resume(resume.raw_text)
+    except Exception as exc:
+        logger.error("Resume scoring failed: %s", exc)
+        # Deterministic fallback — always return something
+        analysis_dict = {
+            "ats_score": 60,
+            "recruiter_score": 60,
+            "overall_score": 60,
+            "breakdown": {},
+            "issues": ["Analysis service temporarily unavailable"],
+            "missing_keywords": [],
+            "suggestions": ["Re-run analysis once the service recovers"],
+            "matched_keywords": [],
+        }
 
-    # Retrieve similar benchmarks using RAG
-    from app.services.rag_service import rag_service
-    benchmarks = await rag_service.retrieve_similar_benchmarks(
-        resume_text=resume.raw_text,
-        db=db,
-        limit=5
-    )
+    # RAG benchmark retrieval — non-fatal; skip if table missing or any error
+    benchmarks = []
+    try:
+        from app.services.rag_service import rag_service
+        benchmarks = await rag_service.retrieve_similar_benchmarks(
+            resume_text=resume.raw_text,
+            db=db,
+            limit=5,
+        )
+    except Exception as exc:
+        logger.warning("RAG benchmark retrieval skipped: %s", exc)
 
-    analysis = AnalysisResult(
-        id=uuid.uuid4(),
-        resume_id=resume_id,
-        user_id=current_user.id,
-        ats_score=analysis_dict["ats_score"],
-        recruiter_score=analysis_dict["recruiter_score"],
-        overall_score=analysis_dict["overall_score"],
-        score_breakdown=analysis_dict["breakdown"],
-        issues=analysis_dict["issues"],
-        missing_keywords=analysis_dict["missing_keywords"],
-        suggestions=analysis_dict["suggestions"],
-        matched_keywords=analysis_dict.get("matched_keywords"),
-        reference_comparisons=benchmarks,
-    )
-    db.add(analysis)
-    await db.commit()
-    await db.refresh(analysis)
-    return AnalysisResultOut.model_validate(analysis)
+    try:
+        analysis = AnalysisResult(
+            id=uuid.uuid4(),
+            resume_id=resume_id,
+            user_id=current_user.id,
+            ats_score=analysis_dict["ats_score"],
+            recruiter_score=analysis_dict["recruiter_score"],
+            overall_score=analysis_dict["overall_score"],
+            score_breakdown=analysis_dict["breakdown"],
+            issues=analysis_dict["issues"],
+            missing_keywords=analysis_dict["missing_keywords"],
+            suggestions=analysis_dict["suggestions"],
+            matched_keywords=analysis_dict.get("matched_keywords"),
+            reference_comparisons=benchmarks if benchmarks else None,
+        )
+        db.add(analysis)
+        await db.commit()
+        await db.refresh(analysis)
+        return AnalysisResultOut.model_validate(analysis)
+    except Exception as exc:
+        logger.exception("Failed to persist analysis result")
+        raise HTTPException(status_code=500, detail="Failed to save analysis result")
 
 
 @router.get("/{resume_id}/versions", response_model=list[ResumeVersionOut])

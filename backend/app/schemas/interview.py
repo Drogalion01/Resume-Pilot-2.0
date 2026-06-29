@@ -9,9 +9,16 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
 class InterviewType(str, enum.Enum):
+    # Legacy / generic values
     PHONE = "phone"
     VIDEO = "video"
     ONSITE = "onsite"
+    # Extended 6-phase pipeline (matches Flutter ScheduleInterviewScreen)
+    PHONE_SCREEN = "phone_screen"
+    TECHNICAL = "technical"
+    TAKE_HOME_REVIEW = "take_home_review"
+    BEHAVIORAL = "behavioral"
+    FINAL_ROUND = "final_round"
 
 
 class InterviewCreate(BaseModel):
