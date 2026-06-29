@@ -1,17 +1,32 @@
 // lib/core/web/html_stub.dart
 //
-// Stub for dart:html types used in auth_notifier.dart on non-web platforms.
-// On web, the real dart:html is used instead via the conditional import:
-//   import '../web/html_stub.dart' if (dart.library.html) 'dart:html' as html;
+// Stub for dart:html types used on non-web platforms.
+// On web, the real dart:html is loaded via conditional imports:
+//   import '...html_stub.dart' if (dart.library.html) 'dart:html' as html;
+//
+// Every method/property here is a no-op so all platforms compile cleanly.
 
-// Minimal stubs so mobile builds compile without dart:html.
+// ── MessageEvent stub ─────────────────────────────────────────────────────────
+class MessageEvent {
+  final dynamic data;
+  const MessageEvent({this.data});
+}
 
+// ── BroadcastChannel stub (used in auth_notifier.dart) ───────────────────────
 class BroadcastChannel {
+  // ignore: avoid_unused_constructor_parameters
   BroadcastChannel(String name);
-  Stream<_MessageEvent> get onMessage => const Stream.empty();
+  Stream<MessageEvent> get onMessage => const Stream.empty();
   void close() {}
 }
 
-class _MessageEvent {
-  final dynamic data = null;
+// ── Window stub (used in subscription_provider.dart + paddle_service.dart) ───
+class _Window {
+  Stream<MessageEvent> get onMessage => const Stream.empty();
+  // ignore: avoid_unused_constructor_parameters
+  void open(String url, String target) {}
 }
+
+// Top-level window object mirrors dart:html's global `window`
+// ignore: library_private_types_in_public_api
+final _Window window = _Window();

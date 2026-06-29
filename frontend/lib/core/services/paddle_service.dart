@@ -1,17 +1,18 @@
 // lib/core/services/paddle_service.dart
 //
 // Dart wrapper around the Paddle.js v2 bridge defined in web/index.html.
-// On non-web platforms it is a no-op so mobile builds don't fail.
+// On non-web platforms every method is a no-op so mobile builds compile fine.
 //
-// Usage:
-//   await PaddleService.instance.initialize(ref);          // called once in main / auth state
-//   PaddleService.instance.openCheckout(transactionId);   // opens overlay
+// Conditional imports resolve at compile time:
+//   - Web    → dart:html + dart:js (real implementations)
+//   - Mobile → html_stub.dart + js_stub.dart (no-ops)
 
 import 'package:flutter/foundation.dart';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:js' as js;
+
+import '../web/html_stub.dart'
+    if (dart.library.html) 'dart:html' as html;
+import '../web/js_stub.dart'
+    if (dart.library.js) 'dart:js' as js;
 
 class PaddleService {
   PaddleService._();
@@ -36,10 +37,7 @@ class PaddleService {
   /// Open the Paddle checkout overlay using a transaction ID returned
   /// by the backend POST /subscriptions/checkout endpoint.
   void openCheckoutByTransactionId(String transactionId) {
-    if (!kIsWeb) {
-      debugPrint('[PaddleService] openCheckout is web-only');
-      return;
-    }
+    if (!kIsWeb) return;
     if (!_initialized) {
       debugPrint('[PaddleService] Not initialized — call initialize() first');
       return;
@@ -60,14 +58,16 @@ class PaddleService {
       return;
     }
     try {
-      js.context.callMethod('openPaddleCheckoutByPriceId', [priceId, customerEmail ?? '']);
+      js.context.callMethod(
+          'openPaddleCheckoutByPriceId', [priceId, customerEmail ?? '']);
     } catch (e) {
-      debugPrint('[PaddleService] openPaddleCheckoutByPriceId JS call failed: $e');
+      debugPrint(
+          '[PaddleService] openPaddleCheckoutByPriceId JS call failed: $e');
     }
   }
 
   /// Listen for Paddle checkout events relayed via window.postMessage.
-  /// Returns a StreamSubscription — cancel it when the widget disposes.
+  /// Returns a Stream — subscribe and cancel on widget dispose.
   Stream<Map<String, dynamic>> get eventStream {
     if (!kIsWeb) return const Stream.empty();
     return html.window.onMessage

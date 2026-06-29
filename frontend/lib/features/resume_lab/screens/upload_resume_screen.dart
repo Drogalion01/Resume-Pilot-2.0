@@ -10,7 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/premium_theme.dart';
-import '../../../core/models/resume_model.dart';
 import '../../../shared/widgets/primary_button.dart';
 import '../providers/resume_provider.dart';
 

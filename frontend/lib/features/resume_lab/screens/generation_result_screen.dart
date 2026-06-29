@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/router/router.dart';
 import '../../../app/theme/premium_theme.dart';
+import '../../../core/models/generation_model.dart';
 import '../providers/generation_provider.dart';
 
 class GenerationResultScreen extends ConsumerWidget {

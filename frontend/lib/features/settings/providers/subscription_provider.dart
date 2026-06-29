@@ -5,8 +5,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html show window;
+// Conditional import: on non-web platforms resolves to a no-op stub
+import '../../../core/web/html_stub.dart'
+    if (dart.library.html) 'dart:html' as html;
 
 import '../../../core/network/api_client.dart';
 import '../../../core/services/paddle_service.dart';

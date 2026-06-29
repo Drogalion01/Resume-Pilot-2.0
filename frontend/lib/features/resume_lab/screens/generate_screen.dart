@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/router.dart';
 import '../../../app/theme/premium_theme.dart';
 import '../providers/generation_provider.dart';
-import '../providers/resume_provider.dart';
 
 class GenerateScreen extends ConsumerStatefulWidget {
   final String resumeId;

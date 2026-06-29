@@ -3,8 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 
 import '../../../app/theme/premium_theme.dart';
 import '../../../core/auth/auth_notifier.dart';
