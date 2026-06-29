@@ -44,7 +44,7 @@ class TokenStorage {
   Future<String?> read({required String key}) async {
     if (kIsWeb) {
       try {
-        return _webStorage.getItem(key) as String?;
+        return _webStorage[key];
       } catch (_) {
         return null;
       }
@@ -57,7 +57,7 @@ class TokenStorage {
   Future<void> write({required String key, required String value}) async {
     if (kIsWeb) {
       try {
-        _webStorage.setItem(key, value);
+        _webStorage[key] = value;
       } catch (_) {}
       return;
     }
@@ -69,7 +69,7 @@ class TokenStorage {
   Future<void> delete({required String key}) async {
     if (kIsWeb) {
       try {
-        _webStorage.removeItem(key);
+        _webStorage.remove(key);
       } catch (_) {}
       return;
     }
@@ -92,4 +92,4 @@ class TokenStorage {
 // ── Web localStorage accessor ─────────────────────────────────────────────────
 // Uses dart:html on web, stub on native (never actually called on native).
 
-Storage get _webStorage => html.window.localStorage;
+html.Storage get _webStorage => html.window.localStorage;

@@ -126,6 +126,22 @@ async def create_application(
 # Detail & Updates
 # ═══════════════════════════════════════════════════════════════════════════════
 
+@router.get("/{app_id}/timeline", response_model=list[TimelineEventOut])
+async def get_application_timeline(
+    app_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the timeline for a specific application."""
+    result = await db.execute(
+        select(TimelineEvent)
+        .where(TimelineEvent.application_id == app_id, TimelineEvent.user_id == current_user.id)
+        .order_by(TimelineEvent.created_at.desc())
+    )
+    events = result.scalars().all()
+    return [TimelineEventOut.model_validate(e) for e in events]
+
+
 @router.get("/{app_id}", response_model=ApplicationDetail)
 async def get_application(
     app_id: uuid.UUID,

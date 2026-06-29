@@ -210,11 +210,6 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
     } catch (e) {
       state = state.copyWith(
         status: CheckoutStatus.error,
-
-      state = state.copyWith(status: CheckoutStatus.error, error: msg);
-    } catch (e) {
-      state = state.copyWith(
-        status: CheckoutStatus.error,
         error: e.toString(),
       );
     }

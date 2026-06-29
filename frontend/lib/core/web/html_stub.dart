@@ -22,9 +22,9 @@ class BroadcastChannel {
 
 // ── Storage stub (used in token_storage.dart) ─────────────────────────────────
 class Storage {
-  String? getItem(String key) => null;
-  void setItem(String key, String value) {}
-  void removeItem(String key) {}
+  String? operator [](String key) => null;
+  void operator []=(String key, String value) {}
+  void remove(String key) {}
   void clear() {}
 }
 
