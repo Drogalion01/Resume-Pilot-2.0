@@ -65,10 +65,13 @@ async def get_paddle_config():
     """
     Return the public Paddle client-side token and environment.
     Safe to call without auth — PADDLE_CLIENT_TOKEN is NOT a secret key.
+    `paddle_configured` tells the client whether Paddle.js should be initialized.
     """
+    has_token = bool(settings.PADDLE_CLIENT_TOKEN)
     return {
         "client_token": settings.PADDLE_CLIENT_TOKEN,
         "environment": "sandbox" if settings.ENVIRONMENT != "production" else "production",
+        "paddle_configured": has_token,
     }
 
 
@@ -91,12 +94,14 @@ async def create_checkout(
     Paddle Sandbox docs: https://developer.paddle.com/build/transactions/create-transaction-checkout
     """
     if not settings.PADDLE_API_KEY:
-        # Dev fallback — return a mock URL for testing the UI flow
-        mock_url = (
-            f"https://sandbox-buy.paddle.com/checkout/custom/mock"
-            f"?price_id={body.price_id}&user_id={current_user.id}"
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Payment gateway is not configured. "
+                "Please set PADDLE_API_KEY, PADDLE_CLIENT_TOKEN, and price IDs "
+                "in your environment variables."
+            ),
         )
-        return {"checkout_url": mock_url, "mode": "mock"}
 
     import httpx
 

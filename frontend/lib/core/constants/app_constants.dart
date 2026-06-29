@@ -23,7 +23,7 @@ class AppConstants {
 
   // ── Timeouts ───────────────────────────────────────────────────────────────
   static const Duration connectTimeout = Duration(seconds: 30);
-  static const Duration receiveTimeout = Duration(seconds: 60);
+  static const Duration receiveTimeout = Duration(seconds: 120);  // AI endpoints can take 60-90s
   static const Duration cacheMaxAge    = Duration(minutes: 5);
 
   // ── App ────────────────────────────────────────────────────────────────────

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = Field("ResumePilot <noreply@resumepilot.app>", validation_alias=AliasChoices("EMAIL_FROM", "FROM_EMAIL"))
     APP_DEEP_LINK_BASE: str = "resumepilot://app"
-    APP_WEB_BASE_URL: str = Field("http://localhost:3000", validation_alias=AliasChoices("APP_WEB_BASE_URL", "APP_URL", "FRONTEND_URL"))
+    APP_WEB_BASE_URL: str = Field("https://resume-pilot.tech", validation_alias=AliasChoices("APP_WEB_BASE_URL", "APP_URL", "FRONTEND_URL"))
 
     # ── Encryption (Fernet — AES-256-GCM) ───────────────────────────────────────
     TOKEN_ENCRYPTION_KEY: str = ""  # base64url-encoded 32-byte key
@@ -59,8 +59,14 @@ class Settings(BaseSettings):
 
     # ── App ─────────────────────────────────────────────────────────────────────
     APP_NAME: str = "ResumePilot"
-    FRONTEND_URL: str = Field("http://localhost:3000", validation_alias=AliasChoices("FRONTEND_URL", "APP_URL"))
-    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    FRONTEND_URL: str = Field("https://resume-pilot.tech", validation_alias=AliasChoices("FRONTEND_URL", "APP_URL"))
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "https://resume-pilot.tech",
+        "https://www.resume-pilot.tech",
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "*",  # Allows override via env var; restrict in strict production deployments
+    ]
     DEBUG: bool = False
 
     # ── File uploads ────────────────────────────────────────────────────────────

@@ -14,9 +14,9 @@ import 'package:dio/dio.dart';
 import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'package:dio_cache_interceptor_hive_store/dio_cache_interceptor_hive_store.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../constants/app_constants.dart';
+import '../storage/token_storage.dart';
 
 // ── Providers ──────────────────────────────────────────────────────────────────
 
@@ -35,9 +35,8 @@ class ApiClient {
   late final Dio _dio;
   late final Dio _refreshDio; // separate Dio for refresh — avoids interceptor loop
   late final CacheOptions _cacheOptions;
-  final _storage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
+  // Use platform-adaptive storage (localStorage on web, SecureStorage on native)
+  final _storage = tokenStorage;
 
   String? _accessToken;
 
@@ -95,7 +94,7 @@ class ApiClient {
 // Queues concurrent requests so only ONE refresh is in-flight at a time.
 
 class _SilentRefreshInterceptor extends QueuedInterceptorsWrapper {
-  final FlutterSecureStorage _storage;
+  final TokenStorage _storage;
   final Dio _refreshDio;
   final ApiClient _client;
 

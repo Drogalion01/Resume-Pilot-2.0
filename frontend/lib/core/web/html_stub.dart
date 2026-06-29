@@ -20,11 +20,22 @@ class BroadcastChannel {
   void close() {}
 }
 
+// ── Storage stub (used in token_storage.dart) ─────────────────────────────────
+class Storage {
+  String? getItem(String key) => null;
+  void setItem(String key, String value) {}
+  void removeItem(String key) {}
+  void clear() {}
+}
+
+class _Storage extends Storage {}
+
 // ── Window stub (used in subscription_provider.dart + paddle_service.dart) ───
 class _Window {
   Stream<MessageEvent> get onMessage => const Stream.empty();
   // ignore: avoid_unused_constructor_parameters
   void open(String url, String target) {}
+  Storage get localStorage => _Storage();
 }
 
 // Top-level window object mirrors dart:html's global `window`

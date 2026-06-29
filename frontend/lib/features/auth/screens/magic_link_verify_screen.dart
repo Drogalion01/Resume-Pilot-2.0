@@ -36,13 +36,15 @@ class _MagicLinkVerifyScreenState extends ConsumerState<MagicLinkVerifyScreen> {
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb) {
-      // Native apps can complete automatically because the token arrives via a trusted app deep link.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Auto-verify on both native and web.
+    // On web the token is already in the URL bar (same-origin HTTPS),
+    // so it is safe to consume it immediately without a user tap.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.token.isNotEmpty) {
         ref.read(authNotifierProvider.notifier).verifyMagicLink(widget.token);
-      });
-      _verificationStarted = true;
-    }
+      }
+    });
+    _verificationStarted = true;
   }
 
   @override
@@ -72,16 +74,7 @@ class _MagicLinkVerifyScreenState extends ConsumerState<MagicLinkVerifyScreen> {
       ).animate().fadeIn();
     }
 
-    if (kIsWeb && !_verificationStarted) {
-      return _WebConfirmView(
-        token: widget.token,
-        onContinue: () {
-          setState(() => _verificationStarted = true);
-          ref.read(authNotifierProvider.notifier).verifyMagicLink(widget.token);
-        },
-      ).animate().fadeIn();
-    }
-
+    // Always show the spinner (auto-verify runs on init for both web and native)
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

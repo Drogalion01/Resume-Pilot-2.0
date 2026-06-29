@@ -58,7 +58,12 @@ class SubscriptionPlan {
 class PaddleConfig {
   final String clientToken;
   final String environment;
-  const PaddleConfig({required this.clientToken, required this.environment});
+  final bool paddleConfigured;
+  const PaddleConfig({
+    required this.clientToken,
+    required this.environment,
+    this.paddleConfigured = false,
+  });
 }
 
 // ── Repository ───────────────────────────────────────────────────────────────
@@ -78,8 +83,9 @@ class SubscriptionRepository {
   Future<PaddleConfig> fetchPaddleConfig() async {
     final res = await _dio.get('/subscriptions/config');
     return PaddleConfig(
-      clientToken: res.data['client_token'] as String,
-      environment: res.data['environment'] as String,
+      clientToken: res.data['client_token'] as String? ?? '',
+      environment: res.data['environment'] as String? ?? 'sandbox',
+      paddleConfigured: res.data['paddle_configured'] as bool? ?? false,
     );
   }
 
@@ -112,6 +118,11 @@ final paddleInitProvider = FutureProvider<void>((ref) async {
   try {
     final config =
         await ref.read(subscriptionRepositoryProvider).fetchPaddleConfig();
+    if (!config.paddleConfigured || config.clientToken.isEmpty) {
+      debugPrint('[Paddle] Not configured — skipping initialization. '
+          'Set PADDLE_CLIENT_TOKEN in backend env vars.');
+      return;
+    }
     PaddleService.instance.initialize(
       config.clientToken,
       environment: config.environment,
@@ -167,8 +178,9 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
         return;
       }
 
-      // Path B: Paddle.js not yet ready → create backend transaction and use URL
-      // This handles the race condition where the /config call hasn't resolved yet
+      // Path B: Paddle.js not ready → ask backend to create transaction + get URL
+      // This covers the race condition where /config hasn't resolved yet,
+      // AND the case where PADDLE_API_KEY is set but PADDLE_CLIENT_TOKEN isn't.
       final result = await _repo.createCheckout(priceId);
       final transactionId = result['transaction_id'] as String?;
       final checkoutUrl = result['checkout_url'] as String?;
@@ -189,9 +201,16 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
 
       throw Exception('Checkout unavailable. Please try again.');
     } on DioException catch (e) {
-      final msg = (e.error is ApiException)
-          ? (e.error as ApiException).message
-          : 'Checkout failed. Please try again.';
+      final apiErr = e.error is ApiException ? (e.error as ApiException) : null;
+      final msg = apiErr?.message ??
+          (e.response?.statusCode == 503
+              ? 'Payment gateway is not configured yet. Please contact support.'
+              : 'Checkout failed. Please try again.');
+      state = state.copyWith(status: CheckoutStatus.error, error: msg);
+    } catch (e) {
+      state = state.copyWith(
+        status: CheckoutStatus.error,
+
       state = state.copyWith(status: CheckoutStatus.error, error: msg);
     } catch (e) {
       state = state.copyWith(

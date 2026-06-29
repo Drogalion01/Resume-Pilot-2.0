@@ -15,13 +15,13 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../constants/app_constants.dart';
 import '../models/user_model.dart';
 import '../network/api_client.dart';
+import '../storage/token_storage.dart';
 import 'auth_state.dart';
 // Conditional import: dart:html is only available on the web platform.
 // On mobile/desktop this resolves to a no-op stub.
@@ -40,9 +40,9 @@ final authNotifierProvider =
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final ApiClient _client;
-  final _storage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
+  // Use platform-adaptive storage: localStorage on web, SecureStorage on native.
+  // See lib/core/storage/token_storage.dart for why we avoid flutter_secure_storage on web.
+  final _storage = tokenStorage;
 
   AuthNotifier({required ApiClient client})
       : _client = client,
