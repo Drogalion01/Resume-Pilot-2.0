@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.resumepilot.resume_pilot",
+    "sha256_cert_fingerprints": [
+      "YOUR_APP_SHA256_CERT_FINGERPRINT_GOES_HERE"
+    ]
+  }
+}]

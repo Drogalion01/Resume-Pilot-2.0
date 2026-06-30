@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/web/html_stub.dart'
     if (dart.library.html) 'dart:html' as html;
 
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/services/paddle_service.dart';
 
@@ -159,17 +161,9 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
     if (state.status == CheckoutStatus.loading) return;
     state = state.copyWith(status: CheckoutStatus.loading);
 
-    if (!kIsWeb) {
-      state = state.copyWith(
-        status: CheckoutStatus.error,
-        error: 'Payments are only available on the web app.',
-      );
-      return;
-    }
-
     try {
       // Path A: Paddle.js is initialized → open overlay directly by price ID
-      if (PaddleService.instance.isInitialized) {
+      if (kIsWeb && PaddleService.instance.isInitialized) {
         PaddleService.instance.openCheckoutByPriceId(
           priceId,
           customerEmail: _userEmail,
@@ -178,23 +172,28 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
         return;
       }
 
-      // Path B: Paddle.js not ready → ask backend to create transaction + get URL
+      // Path B: Paddle.js not ready OR non-web platform → ask backend to create transaction + get URL
       // This covers the race condition where /config hasn't resolved yet,
       // AND the case where PADDLE_API_KEY is set but PADDLE_CLIENT_TOKEN isn't.
       final result = await _repo.createCheckout(priceId);
       final transactionId = result['transaction_id'] as String?;
       final checkoutUrl = result['checkout_url'] as String?;
 
-      // If Paddle.js initialized by now (async), use overlay
-      if (transactionId != null && PaddleService.instance.isInitialized) {
+      // If Paddle.js initialized by now (async), use overlay (Web only)
+      if (kIsWeb && transactionId != null && PaddleService.instance.isInitialized) {
         PaddleService.instance.openCheckoutByTransactionId(transactionId);
         state = state.copyWith(status: CheckoutStatus.success);
         return;
       }
 
-      // Path C: Open checkout URL in new tab as final fallback
+      // Path C: Open checkout URL in new tab as final fallback (or mobile default)
       if (checkoutUrl != null) {
-        if (kIsWeb) html.window.open(checkoutUrl, '_blank');
+        final uri = Uri.parse(checkoutUrl);
+        if (kIsWeb) {
+          html.window.open(checkoutUrl, '_blank');
+        } else {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
         state = state.copyWith(status: CheckoutStatus.success);
         return;
       }
